@@ -1,4 +1,5 @@
 import os
+import json  # [repro]
 import time
 import hydra
 import torch
@@ -742,6 +743,9 @@ class Trainer:
 
         if self.accelerator.is_main_process:
             self.wandb_run.log(epoch_log)
+            # [repro] also keep epoch metrics locally (wandb is disabled in this reproduction)
+            with open("epoch_logs.jsonl", "a") as f:
+                f.write(json.dumps({k: float(v) for k, v in epoch_log.items()}) + "\n")
         self.epoch_log = OrderedDict()
 
     def plot_samples(
