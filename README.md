@@ -1,176 +1,108 @@
-# **DINO-WM**: World Models on Pre-trained Visual Features enable Zero-shot Planning
-[[Paper]](https://arxiv.org/abs/2411.04983) [[Code]]() [[Data]](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) [[Project Website]](https://dino-wm.github.io/) 
+# thread0 — DINO-WM 재현
 
-[Gaoyue Zhou](https://gaoyuezhou.github.io/), [Hengkai Pan](https://hengkaipan.github.io/), [Yann LeCun](https://yann.lecun.com/) and [Lerrel Pinto](https://www.lerrelpinto.com/), New York University, Meta AI
+[gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm)([arXiv:2411.04983](https://arxiv.org/abs/2411.04983))의 fork 입니다. main 에는 GPU 환경과 무관하게 모두가 쓰는 것만 둡니다: upstream `0a9492f` 위의 공용 수정과, 벤치마크를 다시 돌리는 도구(`repro/`). GPU 환경에 맞춘 구현과 그 환경의 실행 기록은 [환경별 브랜치](#환경별-브랜치)에 둡니다. 결과와 해석은 [이슈](https://github.com/jongmin-s-multicore/thread0/issues)로 올립니다. 규약은 [AGENTS.md](AGENTS.md), upstream README 는 [README_upstream.md](README_upstream.md).
 
-![teaser_figure](assets/intro.png)
+- 실험 개요·구성·실행 방법: **[repro/README.md](repro/README.md)**
+- 모델·데이터·하이퍼파라미터·평가 프로토콜·upstream 과 다른 점: **[repro/SETTINGS.md](repro/SETTINGS.md)**
+- upstream 대비 코드 수정 (main): `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'` (3개 파일, 수정 블록마다 `[repro]` 주석)
 
-# Getting Started
+| 벤치마크 | world model | planner | 논문 |
+|---|---|---|---|
+| PointMaze · PushT · Wall 성공률 (50 인스턴스) | 공개 체크포인트 | MPC-CEM, 오픈루프 CEM(= MPC 1회차), 오픈루프 GD | Table 1, 8 |
+| Rope · Granular Chamfer distance (10 인스턴스) | 직접 학습 (H=1, frameskip=1, 100 epoch) | MPC-CEM | Table 1, 8 |
+| 예측 품질 LPIPS · SSIM | 위와 같음 | — | Table 4, 9 |
 
-1. [Installation](#installation)
-2. [Datasets](#datasets)
-3. [Train a DINO-WM](#train-a-dino-wm)
-4. [Plan with a DINO-WM](#plan-with-a-dino-wm)
+## upstream 에 더한 수정 (main)
 
-## Installation
+| 파일 | 내용 | 결과에 주는 영향 |
+|---|---|---|
+| `models/dino.py` | DINOv2 hub 코드를 `85a2460` 으로 고정 (Python 3.9, upstream issue #25) | 특징 같음 (max diff 0) |
+| `env/deformable_env/.../flex_env.py` | `pyflex.init()` 을 프로세스당 한 번 (env 여러 개를 만들면 segfault) | — |
+| `train.py` | epoch 지표를 `epoch_logs.jsonl` 에도 기록 (wandb 를 끈 기본 설정용) | 없음 |
 
-Setup an environment
-```bash
-git clone https://github.com/gaoyuezhou/dino_wm.git
-cd dino_wm
-conda env create -f environment.yaml
-conda activate dino_wm
-```
+벤치마크 프로토콜에서 정한 것(MPC 반복 상한 등)은 [repro/SETTINGS.md §6](repro/SETTINGS.md#6-upstream-코드논문과-다른-점).
 
-### Install Mujoco
-                    
-Create the `.mujoco` directory and download Mujoco210 using `wget`:
+## 환경별 브랜치
 
-```bash
-mkdir -p ~/.mujoco
-wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -P ~/.mujoco/
-cd ~/.mujoco
-tar -xzvf mujoco210-linux-x86_64.tar.gz
-```
+GPU 환경에 맞춘 구현(메모리·속도 수정, 러너 기본값)과 그 환경에서 돌린 실행 기록은 main 에 넣지 않고 브랜치에 둡니다. 브랜치는 main 을 따라가며(`git rebase main`) 그 위에 커밋을 더합니다.
 
-Append the following lines to your `~/.bashrc`:
+| 브랜치 | 환경 | 더한 것 |
+|---|---|---|
+| [`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local) | 24 GB GPU 2장 (RTX 3090 Ti + RTX 3090) | fp32 SDPA attention, CEM 롤아웃·GD 청크, 평가 디코딩 메모리, MPC 성공 에피소드 생략, 검증 `no_grad`, 24 GB 메모리 가이드·측정, 실행 기록 — `repro/LOCAL.md` |
+
+## 빠른 시작
 
 ```bash
-# Mujoco Path. Replace `<username>` with your actual username if necessary.
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/<username>/.mujoco/mujoco210/bin
+# 0. 사전 준비: NVIDIA 드라이버, git curl unzip zip, libglew-dev libgl1-mesa-dev (mujoco-py 빌드),
+#    Rope·Granular planning 을 하려면 docker + NVIDIA container runtime (sudo 없이 docker 그룹)
+git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0 && cd ~/thread0
+export DINO_WORK=~/dinowm      # 작업 루트 (기본값, 레포 밖). 머신별 값은 .claude/env.local.sh 에 둘 수 있다 (gitignore)
 
-# NVIDIA Library Path (if using NVIDIA GPUs)
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia
+# 1. 설치: micromamba env (Python 3.9, environment.yaml 고정 버전) + MuJoCo 2.1.0 + mujoco-py 빌드
+bash repro/setup/install_env.sh --dry-run    # 실행할 명령만 확인
+bash repro/setup/install_env.sh
+bash repro/setup/install_pyflex.sh           # Rope·Granular planning 에만 필요 (도커 빌드, 약 1분)
+
+# 2. 데이터와 공개 체크포인트 (OSF). 전부 받으면 zip 21 GB, 풀면 약 236 GB
+bash repro/setup/download_data.sh core checkpoints   # PointMaze·PushT·Wall + 체크포인트만
+bash repro/setup/download_data.sh deformable         # Rope·Granular
+
+# 3. 점검 (레포 루트에서, bash 또는 zsh, 새 셸마다 source)
+source repro/env.sh
+bash repro/setup/check_env.sh            # torch/CUDA, mujoco-py, DINOv2, 공개 체크포인트로 렌더·동역학 대조
+bash repro/setup/check_env.sh --pyflex   # + PyFleX, Rope·Granular
+
+# 4. 공개 체크포인트로 planning 한 번 (PointMaze, 에피소드 2개, 1분 안쪽)
+python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
+  n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
+
+# 5. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(예: hanbin5/local)를 쓴다 — repro/README.md "머신별 설정"
+bash repro/queue/start.sh
 ```
 
-Reload your shell configuration to apply the environment variable changes:
-
-```bash
-source ~/.bashrc
-```
-
-#### Notes
-- For GPU-accelerated simulations, ensure the NVIDIA drivers are correctly installed.
-- If you encounter issues, confirm that the paths in your `LD_LIBRARY_PATH` are correct.
-- If problems persist, refer to these GitHub issue pages for potential solutions: [openai/mujoco-py#773](https://github.com/openai/mujoco-py/issues/773), [ethz-asl/reinmav-gym#35](https://github.com/ethz-asl/reinmav-gym/issues/35).
-
-
-The following are optional installation steps for planning in the deformable environments.
-
-### Install PyFlex (optional for deformable environments)
-
-Install PyFleX if you need to plan within the deformable environments. These installation instructions are adapted from [AdaptiGraph](https://github.com/Boey-li/AdaptiGraph/tree/main).
-
-We are using a docker image to compile PyFleX. Make sure you have the following packages:
-- [docker-ce](https://docs.docker.com/engine/install/ubuntu/)
-- [nvidia-docker](https://github.com/NVIDIA/nvidia-docker#quickstart)
-
-Full installation:
-```bash
-pip install "pybind11[global]"
-sudo docker pull xingyu/softgym
-```
-Run `bash install_pyflex.sh`. You may need to `source ~/.bashrc` to `import PyFleX`.
-
-Or you can manually run
-```bash
-# compile pyflex in docker image
-# re-compile if source code changed
-# make sure ${PWD}/PyFleX is the pyflex root path when re-compiling
-sudo docker run \
-    -v ${PWD}/PyFleX:/workspace/PyFleX \
-    -v ${CONDA_PREFIX}:/workspace/anaconda \
-    -v /tmp/.X11-unix:/tmp/.X11-unix \
-    --gpus all \
-    -e DISPLAY=$DISPLAY \
-    -e QT_X11_NO_MITSHM=1 \
-    -it xingyu/softgym:latest bash \
-    -c "export PATH=/workspace/anaconda/bin:$PATH; cd /workspace/PyFleX; export PYFLEXROOT=/workspace/PyFleX; export PYTHONPATH=/workspace/PyFleX/bindings/build:$PYTHONPATH; export LD_LIBRARY_PATH=$PYFLEXROOT/external/SDL2-2.0.4/lib/x64:$LD_LIBRARY_PATH; cd bindings; mkdir build; cd build; /usr/bin/cmake ..; make -j"
-
-# import to system paths. run these if you do not have these paths yet in ~/.bashrc
-echo '# PyFleX' >> ~/.bashrc
-echo "export PYFLEXROOT=${PWD}/PyFleX" >> ~/.bashrc
-echo 'export PYTHONPATH=${PYFLEXROOT}/bindings/build:$PYTHONPATH' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=${PYFLEXROOT}/external/SDL2-2.0.4/lib/x64:$LD_LIBRARY_PATH' >> ~/.bashrc
-echo '' >> ~/.bashrc
-```
-
-# Datasets
-
-Dataset for each task can be downloaded [here](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28). 
-
-Once the datasets are downloaded, unzip them. For the deformable dataset, you need to combine all parts and then unzip:
-```
-zip -s- deformable.zip -O deformable_full.zip
-unzip deformable_full.zip
-```
-
-Set an environment variable pointing to your dataset folder:
-```bash
-# Replace /path/to/data with the actual path to your dataset folder.
-export DATASET_DIR=/path/to/data
-```
-Inside the dataset folder, you should find the following structure:
-```
-data
-├── deformable
-│   ├── granular
-│   └── rope
-├── point_maze
-├── pusht_noise
-└── wall_single
-```
-
-
-# Train a DINO-WM
-Once you have completed the above steps, you can check whether you could launch training with an example command like this:
+## 구성
 
 ```
-python train.py --config-name train.yaml env=point_maze frameskip=5 num_hist=3
-```
-You may specify models' output directory at `ckpt_base_path` in `conf/train.yaml`.
-
-# Plan with a DINO-WM
-Once a world model has been trained, you may use it for planning with an example command like this:
-
-```
-python plan.py model_name=<model_name> n_evals=5 planner=cem goal_H=5 goal_source='random_state' planner.opt_steps=30
-```
-
-where the model is saved at folder `<ckpt_base_path>/outputs/<model_name>`, and `<ckpt_base_path>` can be specified in `conf/plan.yaml`.
-
-<!-- ## Acknowledgement
-TODO -->
-
-# Pre-trained Model Checkpoints
-
-We have uploaded our trained world model checkpoints for PointMaze, PushT, and Wall [here](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) under `checkpoints`. You can launch planning jobs with their respective configs in the repo:
-
-First, update `ckpt_base_path` to where the checkpoints are saved in the plan configs.
-
-Then launch planning runs with the following commands:
-```bash
-# PointMaze
-python plan.py --config-name plan_point_maze.yaml model_name=point_maze
-# PushT
-python plan.py --config-name plan_pusht.yaml model_name=pusht
-# Wall
-python plan.py --config-name plan_wall.yaml model_name=wall
+(upstream dino_wm)       train.py plan.py conf/ models/ planning/ env/ datasets/ metrics/ environment.yaml …
+repro/
+  README.md SETTINGS.md  실험 개요·실행 방법, 실험 세팅
+  env.sh                 경로·환경변수의 단일 출처 (DINO_WORK 등). source 로 실행
+  setup/                 env 설치, PyFleX 빌드, OSF 다운로드, 점검 (checks/)
+  queue/                 파일 상태 기반 GPU 작업 큐와 러너
+  jobs/benchmark.txt     벤치마크 작업 목록
+  eval/                  예측 품질(LPIPS·SSIM), 결과 요약
+  make_run_yaml.py       runs/*/run.yaml 생성
+  runs/{train,eval}/<run-id>/run.yaml   실행별 설정 기록 (결과 수치는 이슈에)
+  requirements/          환경 패키지 목록 (pip freeze, conda list)
+AGENTS.md                저장소 운영 규약
+README_upstream.md       upstream README
 ```
 
-Planning logs and visualizations can be found in `./plan_outputs`.
+설치 후 디렉터리 (`$DINO_WORK`, 기본 `~/dinowm`):
 
+| 경로 | 내용 |
+|---|---|
+| `envs/dino_wm` | micromamba env (Python 3.9.19, torch 2.3.0+cu121), 9.0 GB |
+| `data/` | `point_maze` `pusht_noise` `wall_single` `deformable/{rope,granular}` (`DATASET_DIR`) |
+| `checkpoints/` | `DINO_CKPT`. 아래 `outputs/{point_maze,pusht,wall_single}` 가 공개 체크포인트 |
+| `torch_home/` | torch.hub 캐시: DINOv2 코드(`85a2460`)와 가중치, LPIPS VGG (`TORCH_HOME`) |
+| `PyFleX/` | AdaptiGraph `a7c7535` 의 PyFleX 와 빌드 결과 (`PYFLEXROOT`) |
+| `train_runs/` `runs/` `results/` | 학습한 world model, planning·평가 산출물, 요약 (`DINO_TRAIN`, `DINO_RUNS`) |
+| `tools/` | micromamba, 설치 중 만든 파일, AdaptiGraph clone |
+| `downloads/` | OSF zip 원본 21 GB. 압축을 푼 뒤에는 지워도 된다 (`DINO_DOWNLOADS`) |
+| `~/.mujoco/mujoco210` | MuJoCo 2.1.0 (`MUJOCO_DIR`) |
 
-## Citation
+## 설치 스크립트를 확인한 환경
 
-```
-@misc{zhou2024dinowmworldmodelspretrained,
-      title={DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning}, 
-      author={Gaoyue Zhou and Hengkai Pan and Yann LeCun and Lerrel Pinto},
-      year={2024},
-      eprint={2411.04983},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2411.04983}, 
-}
-```
+| 항목 | 값 |
+|---|---|
+| OS | Ubuntu 24.04, NVIDIA driver 580.178.04 |
+| 소프트웨어 | Python 3.9.19 (conda-forge), torch 2.3.0+cu121, mujoco-py 2.1.2.14 (EGL), gym 0.23.1, hydra-core 1.2.0, PyFleX (CUDA 9.2 도커 빌드) |
+
+`repro/setup/` 스크립트는 위 환경에서 손으로 실행한 명령을 옮긴 것입니다. 각 명령은 실행해 봤고(pip 설치는 uv 로), 스크립트를 새 머신에서 처음부터 끝까지 돌려 보지는 않았습니다.
+
+## 라이선스
+
+- 코드는 upstream 과 같은 MIT ([LICENSE](LICENSE), © gaoyuezhou). `repro/` 와 수정 부분도 MIT 로 둡니다.
+- 데이터셋과 체크포인트는 DINO-WM 저자의 [OSF 프로젝트](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28)에서 받습니다. 이 레포에 넣거나 재배포하지 않습니다.
+- AdaptiGraph (MIT, PyFleX 는 NVIDIA FleX 기반), DINOv2 (Apache-2.0), MuJoCo 2.1.0 (Apache-2.0) 은 각 저장소에서 받습니다. 학습한 world model 가중치는 이 레포에 넣지 않습니다.
