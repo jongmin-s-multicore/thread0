@@ -3,7 +3,7 @@ id: dinowm_granular-dinov2s14-100ep-at100-mpccem
 kind: eval
 stack: dinowm
 job: granular_mpc
-date: '-'
+date: 2026-10-01
 env: granular
 model:
   source: 직접 학습 runs/train/dinowm_granular-dinov2s14-100ep
@@ -16,7 +16,7 @@ planner:
   cem: 'horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps 30'
   n_taken_actions: goal_H 5
   max_iter: '5 (원본 null = 무제한; deformable 은 success 가 항상 False)'
-  eval_every: 1000 (내부 CEM 시뮬 평가는 opt step 0 에서만)
+  eval_every: 1000 (내부 CEM 시뮬 평가는 첫 opt step 뒤 한 번만)
 protocol:
   n_evals: 10
   goal_source: random_state
@@ -28,11 +28,11 @@ command: >-
   model_name=train_granular planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000
   n_evals=10 goal_source=random_state goal_H=5
 runner_env: >-
-  DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_GD_CHUNK=8 (이 브랜치 run_plan.sh
-  기본값; 청크는 결과와 무관)
+  DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_info.txt; 청크는
+  합산 순서만 바꾼다, LOCAL.md §2)
 code: >-
-  hanbin5/local: gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- .
-  ':!repro' ':!*.md' ':!.gitignore')
+  hanbin5/local 798234f. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
+  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
 output: $DINO_RUNS/granular_mpc/
 results: 'logs.json 의 mpc/mean_chamfer_distance (반복별), final_eval/mean_chamfer_distance'
 job_env: 'CKPT_BASE=$DINO_TRAIN (jobs/benchmark.txt)'

@@ -99,8 +99,43 @@ def dump(path, d, header):
 
 
 HEADER = "# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다."
-CODE = "hanbin5/local: gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')"
-RUNNER_ENV = "DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_GD_CHUNK=8 (이 브랜치 run_plan.sh 기본값; 청크는 결과와 무관)"
+CODE = "upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')"
+# 나누기 전에 시작한 작업: run_info.txt 에 커밋이 없어 여기에 적는다 (LOCAL.md §6). repro/ 밖 코드는 이 브랜치와 같다.
+PRE_SPLIT = {
+    **{j: "fork 이전 upstream clone 0a9492f 에 같은 diff 를 커밋 없이 패치 (DINOv2 hub 캐시 85a2460)"
+       for j in ("train_rope", "train_granular", "pointmaze_mpc", "pusht_mpc", "wall_mpc", "pusht_gd")},
+    "wall_gd": "나누기 전 main c34ddd3 (archive/2026-10-01-pre-split 의 조상)",
+    "wall_cem30": "나누기 전 main 3a4341b (태그 archive/2026-10-01-pre-split)",
+}
+OLD_ENV = {"sdpa": "DINO_WM_SDPA", "skip_solved": "DINO_WM_SKIP_SOLVED", "chunk": "DINO_WM_ROLLOUT_CHUNK", "gdchunk": "DINO_WM_GD_CHUNK"}
+
+
+def run_start(job):
+    p = os.path.join(RUNS, job, "run_info.txt")
+    if not os.path.exists(p):
+        return ""
+    return next((l for l in open(p) if l.startswith("START")), "")
+
+
+def code_of(job):
+    m = re.search(r"\bcommit=(\w+)", run_start(job))
+    where = f"hanbin5/local {m.group(1)}" if m else PRE_SPLIT.get(job, "hanbin5/local (실행 전)")
+    return f"{where}. 코드: {CODE}"
+
+
+def runner_env_of(job):
+    """run_info.txt 에 기록된 DINO_WM_* 값 (이전 형식은 chunk= sdpa= ... 를 옮긴다)."""
+    line = run_start(job)
+    m = re.search(r"env=\[([^\]]*)\]", line)
+    if m:
+        kv = dict(x.split("=", 1) for x in m.group(1).split())
+    else:
+        kv = {OLD_ENV[k]: v for k, v in re.findall(r"\b(sdpa|skip_solved|chunk|gdchunk)=(\S+)", line)}
+    if not kv:
+        return "-"
+    return " ".join(f"{k}={kv[k]}" for k in sorted(kv)) + " (run_info.txt; 청크는 합산 순서만 바꾼다, LOCAL.md §2)"
+
+
 written = []
 for j in parse_jobs():
     name, kind, args = j["name"], j["kind"], j["args"]
@@ -114,7 +149,7 @@ for j in parse_jobs():
                  training=dict(epochs=100, batch_size=32, optimizer="predictor·action encoder AdamW, decoder Adam",
                                lr="decoder 3e-4, predictor 5e-4, action encoder 5e-4 (upstream 기본값)", seed=0, save_every_x_epoch=10),
                  command=f"bash repro/queue/run_train.sh {name} <gpu> " + " ".join(args),
-                 output=f"$DINO_TRAIN/outputs/{name}/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)", code=CODE)
+                 output=f"$DINO_TRAIN/outputs/{name}/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)", code=code_of(name))
         path = os.path.join(EXP, "runs", "train", rid, "run.yaml")
     elif kind == "plan":
         h = hydra_args(args)
@@ -158,12 +193,12 @@ for j in parse_jobs():
                 variant = "mpccem"
                 planner = dict(name="MPC-CEM (conf/planner/mpc_cem.yaml)", cem="horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps 30",
                                n_taken_actions="goal_H 5", max_iter=f"{h['planner.max_iter']} (원본 null = 무제한; deformable 은 success 가 항상 False)",
-                               eval_every=f"{h['planner.sub_planner.eval_every']} (내부 CEM 시뮬 평가는 opt step 0 에서만)")
+                               eval_every=f"{h['planner.sub_planner.eval_every']} (내부 CEM 시뮬 평가는 첫 opt step 뒤 한 번만)")
                 read = "logs.json 의 mpc/mean_chamfer_distance (반복별), final_eval/mean_chamfer_distance"
         rid = f"{base}-at{epoch}-{variant}"
         d = dict(id=rid, kind="eval", **common, env=env_name, model=model, planner=planner, protocol=protocol,
                  command=("CKPT_BASE=$DINO_TRAIN " if j["env"] else "") + f"bash repro/queue/run_plan.sh {name} <gpu> " + " ".join(args),
-                 runner_env=RUNNER_ENV, code=CODE, output=f"$DINO_RUNS/{name}/", results=read)
+                 runner_env=runner_env_of(name), code=code_of(name), output=f"$DINO_RUNS/{name}/", results=read)
         if j["env"]:
             d["job_env"] = " ".join(f"{k}={v}" for k, v in j["env"].items()) + " (jobs/benchmark.txt)"
         path = os.path.join(EXP, "runs", "eval", rid, "run.yaml")
@@ -181,7 +216,7 @@ for j in parse_jobs():
                  model=dict(ckpt=f"{ckroot}/outputs/{mname}/checkpoints/model_latest.pth", epoch=epoch),
                  protocol=dict(split="검증 분할 (PushT 는 val 폴더 21 궤적, 그 밖은 학습과 같은 seed 42 궤적 분할)", samples=f"슬라이스 전체. {cap} 개를 넘으면 seed(training.seed) 로 만든 슬라이스 순서에서 균등 간격 {cap} 개",
                                metric="model.eval() 의 1-step 예측을 디코딩해 정답 프레임과 LPIPS(VGG)·SSIM(11×11) — upstream train.py 검증과 같은 계산"),
-                 command=f"bash repro/queue/run_cmd.sh {name} <gpu> " + " ".join(args), code=CODE,
+                 command=f"bash repro/queue/run_cmd.sh {name} <gpu> " + " ".join(args), runner_env=runner_env_of(name), code=code_of(name),
                  output=out, results="output json 의 pred_lpips, pred_ssim")
         path = os.path.join(EXP, "runs", "eval", rid, "run.yaml")
     d = {**{k: d[k] for k in ("id", "kind", "stack", "job")}, "date": started(name, path) or "-", **{k: v for k, v in d.items() if k not in ("id", "kind", "stack", "job")}}

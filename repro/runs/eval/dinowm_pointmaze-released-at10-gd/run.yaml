@@ -3,7 +3,7 @@ id: dinowm_pointmaze-released-at10-gd
 kind: eval
 stack: dinowm
 job: pointmaze_gd
-date: '-'
+date: 2026-10-01
 env: point_maze
 model:
   source: 공개 체크포인트 (OSF checkpoints/outputs.zip)
@@ -25,10 +25,10 @@ command: >-
   bash repro/queue/run_plan.sh pointmaze_gd <gpu> --config-name plan.yaml model_name=point_maze
   planner=gd goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0
 runner_env: >-
-  DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_GD_CHUNK=8 (이 브랜치 run_plan.sh
-  기본값; 청크는 결과와 무관)
+  DINO_WM_GD_CHUNK=4 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_info.txt; 청크는
+  합산 순서만 바꾼다, LOCAL.md §2)
 code: >-
-  hanbin5/local: gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- .
-  ':!repro' ':!*.md' ':!.gitignore')
+  hanbin5/local 798234f. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
+  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
 output: $DINO_RUNS/pointmaze_gd/
 results: logs.json 의 final_eval/success_rate

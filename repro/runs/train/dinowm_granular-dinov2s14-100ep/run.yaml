@@ -28,5 +28,6 @@ command: >-
 output: >-
   $DINO_TRAIN/outputs/train_granular/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)
 code: >-
-  hanbin5/local: gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- .
-  ':!repro' ':!*.md' ':!.gitignore')
+  fork 이전 upstream clone 0a9492f 에 같은 diff 를 커밋 없이 패치 (DINOv2 hub 캐시 85a2460). 코드: upstream
+  gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- . ':!repro' ':!*.md'
+  ':!.gitignore')

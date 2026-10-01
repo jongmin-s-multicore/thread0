@@ -27,11 +27,12 @@ command: >-
   bash repro/queue/run_plan.sh pusht_mpc <gpu> --config-name plan_pusht.yaml model_name=pusht
   planner.max_iter=10
 runner_env: >-
-  DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_GD_CHUNK=8 (이 브랜치 run_plan.sh
-  기본값; 청크는 결과와 무관)
+  DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_info.txt; 청크는
+  합산 순서만 바꾼다, LOCAL.md §2)
 code: >-
-  hanbin5/local: gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- .
-  ':!repro' ':!*.md' ':!.gitignore')
+  fork 이전 upstream clone 0a9492f 에 같은 diff 를 커밋 없이 패치 (DINOv2 hub 캐시 85a2460). 코드: upstream
+  gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- . ':!repro' ':!*.md'
+  ':!.gitignore')
 output: $DINO_RUNS/pusht_mpc/
 results: >-
   logs.json 의 mpc/success_rate (step k = MPC k회 예산, sticky). step 1 = 오픈루프 CEM (SETTINGS.md §5.3)
