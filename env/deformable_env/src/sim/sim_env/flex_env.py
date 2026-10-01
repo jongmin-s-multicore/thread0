@@ -20,6 +20,13 @@ from ..utils import fps_with_idx, quatFromAxisAngle, find_min_distance, rand_flo
 
 BASE_DIR = os.path.abspath(os.path.join(__file__, "../../../../../../"))
 
+# [repro] pyflex keeps one global simulator/renderer per process. Calling pyflex.init() again
+# (e.g. SerialVectorEnv constructing n_evals FlexEnvs in plan.py) re-creates the FleX
+# library + EGL context without tearing down the old ones; the next set_scene() then frees
+# meshes/solver from the old library with the new one -> segfault in add_mesh after a few
+# envs. Initialize only once per process (set_scene() still rebuilds the scene per env).
+_PYFLEX_INITIALIZED = False
+
 class FlexEnv(gym.Env):
     def __init__(self, config=None) -> None:
         super().__init__()
@@ -53,7 +60,10 @@ class FlexEnv(gym.Env):
         pyflex.set_screenHeight(self.screenHeight)
         pyflex.set_light_dir(np.array([0.1, 5.0, 0.1]))
         pyflex.set_light_fov(70.0)
-        pyflex.init(self.dataset_config["headless"])
+        global _PYFLEX_INITIALIZED
+        if not _PYFLEX_INITIALIZED:
+            pyflex.init(self.dataset_config["headless"])
+            _PYFLEX_INITIALIZED = True
 
         # set up camera
         self.camera_view = self.dataset_config["camera_view"]
@@ -536,7 +546,10 @@ class FlexEnv(gym.Env):
             return pyflex.render(render_depth=True).reshape(self.screenHeight, self.screenWidth, 5)
 
     def close(self):
-        pyflex.clean()
+        global _PYFLEX_INITIALIZED
+        if _PYFLEX_INITIALIZED:
+            pyflex.clean()
+            _PYFLEX_INITIALIZED = False
 
     def sample_action(self, init=False, boundary_points=None, boundary=None):
         if self.obj in ["rope", "granular"]:
