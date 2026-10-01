@@ -1,3 +1,4 @@
+import os
 import torch
 import hydra
 import copy
@@ -84,6 +85,9 @@ class MPCPlanner(BasePlanner):
         memo_actions = None
         while not np.all(self.is_success) and self.iter < self.max_iter:
             self.sub_planner.logging_prefix = f"plan_{self.iter}"
+            if os.environ.get("DINO_WM_SKIP_SOLVED", "0") == "1" and hasattr(self.sub_planner, "active_mask"):
+                # [repro] don't spend CEM compute on episodes that already succeeded (their actions are zeroed below)
+                self.sub_planner.active_mask = ~self.is_success
             actions, _ = self.sub_planner.plan(
                 obs_0=cur_obs_0,
                 obs_g=obs_g,
