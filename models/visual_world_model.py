@@ -1,3 +1,4 @@
+import os  # [repro]
 import torch
 import torch.nn as nn
 from torchvision import transforms
@@ -289,6 +290,18 @@ class VWorldModel(nn.Module):
                 visuals: (b, t+n+1, 3, img_size, img_size)
                 z: (b, t+n+1, num_patches, emb_dim)
         """
+        # [repro] optional batch chunking to fit 24GB GPUs; samples are independent so results are unchanged
+        chunk = int(os.environ.get("DINO_WM_ROLLOUT_CHUNK", "0"))
+        if chunk > 0 and act.shape[0] > chunk and not torch.is_grad_enabled():
+            outs = [
+                self._rollout({k: v[i : i + chunk] for k, v in obs_0.items()}, act[i : i + chunk])
+                for i in range(0, act.shape[0], chunk)
+            ]
+            z_obses = {k: torch.cat([o[0][k] for o in outs], dim=0) for k in outs[0][0]}
+            return z_obses, torch.cat([o[1] for o in outs], dim=0)
+        return self._rollout(obs_0, act)
+
+    def _rollout(self, obs_0, act):
         num_obs_init = obs_0['visual'].shape[1]
         act_0 = act[:, :num_obs_init]
         action = act[:, num_obs_init:] 
