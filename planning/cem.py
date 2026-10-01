@@ -132,7 +132,7 @@ class CEMPlanner(BasePlanner):
                 self.wandb_run.log(logs)
                 self.dump_logs(logs)
                 active = self.active_mask if self.active_mask is not None else np.ones(n_evals, dtype=bool)
-                if np.all(successes[active]):
+                if np.all(successes[active]):  # [repro] only episodes still being planned
                     break  # terminate planning if all success
 
         return mu, np.full(n_evals, np.inf)  # all actions are valid

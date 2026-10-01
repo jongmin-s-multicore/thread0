@@ -60,7 +60,7 @@ class FlexEnv(gym.Env):
         pyflex.set_screenHeight(self.screenHeight)
         pyflex.set_light_dir(np.array([0.1, 5.0, 0.1]))
         pyflex.set_light_fov(70.0)
-        global _PYFLEX_INITIALIZED
+        global _PYFLEX_INITIALIZED  # [repro] init once per process
         if not _PYFLEX_INITIALIZED:
             pyflex.init(self.dataset_config["headless"])
             _PYFLEX_INITIALIZED = True
@@ -546,7 +546,7 @@ class FlexEnv(gym.Env):
             return pyflex.render(render_depth=True).reshape(self.screenHeight, self.screenWidth, 5)
 
     def close(self):
-        global _PYFLEX_INITIALIZED
+        global _PYFLEX_INITIALIZED  # [repro] clean only if initialized
         if _PYFLEX_INITIALIZED:
             pyflex.clean()
             _PYFLEX_INITIALIZED = False

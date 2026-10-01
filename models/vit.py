@@ -1,5 +1,5 @@
 # adapted from https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py
-import os
+import os  # [repro]
 import torch
 from torch import nn
 from einops import rearrange, repeat
