@@ -46,7 +46,7 @@
 
 ## 5. 실행 기록
 
-`repro/runs/{train,eval}/<run-id>/run.yaml` 에 실행별 설정을 둔다 (결과 수치 없음). `python3 repro/make_run_yaml.py` 로 `repro/jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/run_info.txt` 에서 다시 만든다.
+`repro/runs/{train,eval}/<run-id>/run.yaml` 에 실행별 설정을 둔다 (결과 수치 없음). `source repro/env.sh && python3 repro/make_run_yaml.py` 로 `repro/jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/run_info.txt` 에서 다시 만든다.
 
 | run-id | job | 내용 |
 |---|---|---|
@@ -61,6 +61,7 @@
 ## 6. 코드 버전과 결과의 대응
 
 - 벤치마크 작업은 이 브랜치와 같은 코드(upstream `0a9492f` + main 공용 수정 + 2절 수정)로 돌았다. fork 를 만들기 전에 시작한 작업은 upstream clone 에 같은 diff 를 패치로 적용해 돌렸고, DINOv2 는 같은 커밋(`85a2460`)을 hub 캐시로 썼다.
+- main/브랜치를 나누기(2026-10-01) 전에 시작한 작업은 그때의 main `3a4341b` 에서 돌았다. 이 커밋은 태그 [`archive/2026-10-01-pre-split`](https://github.com/jongmin-s-multicore/thread0/tree/archive/2026-10-01-pre-split) 로 남겼다. `repro/`·문서를 뺀 코드는 이 브랜치와 같다 (`git diff archive/2026-10-01-pre-split hanbin5/local -- . ':!repro' ':!*.md' ':!.gitignore'` 가 비어 있다). 그 작업들의 `run_info.txt` 는 이전 형식(`chunk= sdpa= skip_solved= gdchunk=`, 브랜치·커밋 없음)이다. 결과 이슈에는 `hanbin5/local` 의 커밋을 적고 이 대응을 함께 적는다.
 - `train_rope` 는 planning 쪽 수정(`cem.py`·`mpc.py`·`evaluator.py`)이 들어가기 전에 시작했지만 학습은 그 파일을 쓰지 않는다.
 - OOM 이나 코드 수정으로 중간에 멈춘 시도는 결과에 쓰지 않는다.
 - `repro/eval/eval_pred_quality.py` 는 공개 전 검토에서 부분 표본이 실행마다 달라지는 것을 찾아 `seed(training.seed)` 를 넣었다 (예측 품질 작업은 그 뒤에 시작한다).
