@@ -1,4 +1,5 @@
 # adapted from https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py
+import os  # [repro]
 import torch
 from torch import nn
 from einops import rearrange, repeat
@@ -6,6 +7,7 @@ from einops import rearrange, repeat
 # helpers
 NUM_FRAMES = 1
 NUM_PATCHES = 1
+USE_SDPA = os.environ.get("DINO_WM_SDPA", "0") == "1"  # [repro] opt-in fused attention for planning
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
@@ -67,6 +69,14 @@ class Attention(nn.Module):
 
         qkv = self.to_qkv(x).chunk(3, dim = -1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
+
+        if USE_SDPA and not self.training:
+            # [repro] fused fp32 attention with the same block-causal mask (inference only, opt-in)
+            out = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, attn_mask=(self.bias[:, :, :T, :T] != 0).to(q.device), scale=self.scale
+            )
+            out = rearrange(out, 'b h n d -> b n (h d)')
+            return self.to_out(out)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
         # apply causal mask
