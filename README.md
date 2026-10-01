@@ -1,5 +1,7 @@
 # thread0 — DINO-WM 재현
 
+> **이 브랜치는 [`hanbin5/local`](repro/LOCAL.md)** — main 위에 24 GB GPU 2장 환경용 메모리·속도 수정과 이 환경의 실행 기록을 더했다. 공용 내용은 [main](https://github.com/jongmin-s-multicore/thread0/tree/main).
+
 [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm)([arXiv:2411.04983](https://arxiv.org/abs/2411.04983))의 fork 입니다. main 에는 GPU 환경과 무관하게 모두가 쓰는 것만 둡니다: upstream `0a9492f` 위의 공용 수정과, 벤치마크를 다시 돌리는 도구(`repro/`). GPU 환경에 맞춘 구현과 그 환경의 실행 기록은 [환경별 브랜치](#환경별-브랜치)에 둡니다. 결과와 해석은 [이슈](https://github.com/jongmin-s-multicore/thread0/issues)로 올립니다. 규약은 [AGENTS.md](AGENTS.md), upstream README 는 [README_upstream.md](README_upstream.md).
 
 - 실험 개요·구성·실행 방법: **[repro/README.md](repro/README.md)**

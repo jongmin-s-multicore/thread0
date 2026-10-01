@@ -8,6 +8,11 @@ main() {
   source "$HERE/../env.sh"
   NAME=$1; GPU=$2; shift 2
   # GPU 환경에 맞춘 옵션(메모리·속도)은 환경별 브랜치의 이 파일에서 export 한다 (AGENTS.md §1)
+  # [hanbin5/local] 24 GB GPU 용 기본값 (repro/LOCAL.md). 끄려면 0 으로 export 한다
+  export DINO_WM_SDPA=${DINO_WM_SDPA:-1}                      # predictor attention 을 fp32 SDPA 로 (상대오차 ≤ 1.3e-6)
+  export DINO_WM_SKIP_SOLVED=${DINO_WM_SKIP_SOLVED:-1}        # MPC 에서 이미 성공한 에피소드는 CEM 을 건너뛴다
+  export DINO_WM_ROLLOUT_CHUNK=${DINO_WM_ROLLOUT_CHUNK:-150}  # CEM 롤아웃 300 샘플을 150 씩 (결과 같음)
+  export DINO_WM_GD_CHUNK=${DINO_WM_GD_CHUNK:-8}              # GD 순전파·역전파를 에피소드 8개씩 (그래디언트 같음)
   export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
   OUT=$DINO_RUNS/$NAME
   if [ -f "$OUT/DONE" ]; then echo "$NAME already done"; return 0; fi
