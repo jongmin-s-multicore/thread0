@@ -535,6 +535,7 @@ class Trainer:
             loss_components = {f"train_{k}": [v] for k, v in loss_components.items()}
             self.logs_update(loss_components)
 
+    @torch.no_grad()  # [repro] validation never backprops; avoids building autograd graphs (OOM on 24GB)
     def val(self):
         self.model.eval()
         if len(self.train_traj_dset) > 0 and self.cfg.has_predictor:
