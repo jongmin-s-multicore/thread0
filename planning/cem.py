@@ -40,6 +40,7 @@ class CEMPlanner(BasePlanner):
         self.opt_steps = opt_steps
         self.eval_every = eval_every
         self.logging_prefix = logging_prefix
+        self.active_mask = None  # [repro] set by MPCPlanner: evals that still need planning
 
     def init_mu_sigma(self, obs_0, actions=None):
         """
@@ -84,6 +85,8 @@ class CEMPlanner(BasePlanner):
             # optimize individual instances
             losses = []
             for traj in range(n_evals):
+                if self.active_mask is not None and not self.active_mask[traj]:
+                    continue  # [repro] already solved in MPC: its actions are masked to zero anyway
                 cur_trans_obs_0 = {
                     key: repeat(
                         arr[traj].unsqueeze(0), "1 ... -> n ...", n=self.num_samples
@@ -128,7 +131,8 @@ class CEMPlanner(BasePlanner):
                 logs.update({"step": i + 1})
                 self.wandb_run.log(logs)
                 self.dump_logs(logs)
-                if np.all(successes):
+                active = self.active_mask if self.active_mask is not None else np.ones(n_evals, dtype=bool)
+                if np.all(successes[active]):  # [repro] only episodes still being planned
                     break  # terminate planning if all success
 
         return mu, np.full(n_evals, np.inf)  # all actions are valid
