@@ -1,7 +1,7 @@
 # DINO-WM 재현 — 실험 세팅
 
-DINO-WM([arXiv:2411.04983](https://arxiv.org/abs/2411.04983) v2, 코드 [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm) `0a9492f`)의 벤치마크를 다시 돌리는 실험의 공용 설정이다 (GPU 환경과 무관한 것만. 환경별 수정·측정은 환경 브랜치에). 결과와 해석은 [이슈](https://github.com/jongmin-s-multicore/thread0/issues)로 따로 올린다. 코드·환경·실행 방법은 [README](README.md) 에 있고, 이 문서의 `queue/`·`jobs/`·`eval/`·`runs/`·`setup/` 경로는 `repro/` 기준, 그 밖의 파일 경로는 레포 루트(upstream 코드) 기준이다.
-수치는 upstream 설정 파일(`conf/`), 공개 체크포인트의 `hydra.yaml`, `runs/*/run.yaml`, 실행 로그에서 가져왔다. 논문 수치는 v2(2025-02) 기준이다.
+DINO-WM([arXiv:2411.04983](https://arxiv.org/abs/2411.04983) v2, 코드 [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm) `0a9492f`)의 벤치마크를 다시 돌리는 실험의 공용 설정이다 (GPU 환경과 무관한 것만. 환경별 수정·측정은 환경 브랜치에). 결과와 해석은 [이슈](https://github.com/jongmin-s-multicore/thread0/issues)로 따로 올린다. 코드·환경·실행 방법은 [README](README.md) 에 있고, 이 문서의 `queue/`·`jobs/`·`eval/`·`setup/` 경로는 `repro/` 기준, 그 밖의 파일 경로는 레포 루트(upstream 코드) 기준이다.
+수치는 upstream 설정 파일(`conf/`), 공개 체크포인트의 `hydra.yaml`, 환경 브랜치의 `repro/runs/*/*/run.yaml`(예: `hanbin5/local`), 실행 로그에서 가져왔다. 논문 수치는 v2(2025-02) 기준이다.
 
 ## 1. 구성
 

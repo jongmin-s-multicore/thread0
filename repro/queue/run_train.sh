@@ -11,7 +11,7 @@ main() {
   if [ -f "$OUT/DONE" ]; then echo "$NAME already done"; return 0; fi
   mkdir -p "$OUT" "$MODEL"
   cd "$DINO_WM"
-  echo "START $(date -Is) pid=$$ gpu=$GPU branch=$(git -C "$DINO_WM" rev-parse --abbrev-ref HEAD 2>/dev/null) commit=$(git -C "$DINO_WM" rev-parse --short HEAD 2>/dev/null) args=$*" > "$OUT/run_info.txt"
+  echo "START $(date -Is) pid=$$ gpu=$GPU branch=$(git -C "$DINO_WM" rev-parse --abbrev-ref HEAD 2>/dev/null) commit=$(git -C "$DINO_WM" rev-parse --short HEAD 2>/dev/null) env=[$(env | grep -E '^DINO_WM_' | sort | tr '\n' ' ')] args=$*" > "$OUT/run_info.txt"
   CUDA_VISIBLE_DEVICES=$GPU python train.py --config-name train.yaml "$@" ckpt_base_path=$DINO_TRAIN hydra.run.dir=$MODEL > "$DINO_RUNS/$NAME.log" 2>&1
   RC=$?
   echo "END $(date -Is) rc=$RC" >> "$OUT/run_info.txt"
