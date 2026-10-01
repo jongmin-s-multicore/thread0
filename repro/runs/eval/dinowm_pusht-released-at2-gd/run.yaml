@@ -26,6 +26,7 @@ command: >-
   goal_source=dset goal_H=5 n_evals=50 objective.alpha=1
 runner_env: >-
   DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_plan.sh 기본값). 롤아웃·GD 청크는 메모리 조정이라 결과와 무관하고 머신마다 준다
-code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'
+code: >-
+  이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
 output: $DINO_RUNS/pusht_gd/
 results: logs.json 의 final_eval/success_rate

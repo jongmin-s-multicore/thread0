@@ -4,7 +4,7 @@
 
 - 실험 개요·구성·실행 방법: **[repro/README.md](repro/README.md)**
 - 모델·데이터·하이퍼파라미터·평가 프로토콜·upstream 과 다른 점: **[repro/SETTINGS.md](repro/SETTINGS.md)**
-- upstream 대비 코드 수정: `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'` (9개 파일, 고친 곳마다 `[repro]` 주석)
+- upstream 대비 코드 수정: `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'` (9개 파일, 수정 블록마다 `[repro]` 주석)
 
 | 벤치마크 | world model | planner | 논문 |
 |---|---|---|---|

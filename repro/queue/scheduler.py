@@ -78,10 +78,6 @@ def state(name):
         return "failed", None
     if pid and os.path.exists(f"/proc/{pid.group(1)}"):
         return "running", int(m.group(1)) if m else None
-    if not pid:  # started by the old scheduler (no pid recorded): trust it while a plan.py for it runs
-        out = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        if f"hydra.run.dir={RUNS}/{name}" in out:
-            return "running", int(m.group(1)) if m else None
     return "failed", None
 
 

@@ -1,7 +1,7 @@
 # 경로·환경변수의 단일 출처. 셸마다 레포 루트에서 `source repro/env.sh` 로 쓴다 (bash, zsh).
 # 아래 값은 모두 source 전에 export 하면 덮어쓴다. 이 파일에는 일반 기본값만 둔다 — 머신마다 다른 값은 .claude/env.local.sh (gitignore).
 
-if [ -n "${BASH_SOURCE[0]:-}" ]; then _env_sh=${BASH_SOURCE[0]}
+if [ -n "${BASH_VERSION:-}" ]; then _env_sh=${BASH_SOURCE[0]}
 elif [ -n "${ZSH_VERSION:-}" ]; then _env_sh=${(%):-%x}
 else echo "repro/env.sh: bash 또는 zsh 에서 source 한다" >&2; return 1 2>/dev/null || exit 1; fi
 THREAD0=$(cd "$(dirname "$_env_sh")/.." && pwd); unset _env_sh
@@ -11,7 +11,7 @@ export THREAD0
 # 있으면 아래 기본값보다 먼저 읽는다. 그 파일에서도 ${VAR:-값} 형식으로 써서 이미 export 한 값을 존중한다.
 if [ -f "$THREAD0/.claude/env.local.sh" ]; then . "$THREAD0/.claude/env.local.sh"; fi
 
-# 작업 루트: 환경, upstream 코드, 데이터, 체크포인트, 실행 산출물이 모두 이 아래에 생긴다. 레포 밖에 둔다
+# 작업 루트: 환경, 데이터, 체크포인트, 실행 산출물이 모두 이 아래에 생긴다. 레포 밖에 둔다 (코드는 이 레포)
 export DINO_WORK=${DINO_WORK:-$HOME/dinowm}
 case "$DINO_WORK/" in "$THREAD0"/*) echo "repro/env.sh: DINO_WORK($DINO_WORK) 를 레포($THREAD0) 밖으로 정한다" >&2 ;; esac
 export DINO_ENV=${DINO_ENV:-$DINO_WORK/envs/dino_wm}           # micromamba env prefix (Python 3.9)
@@ -42,5 +42,5 @@ export PYTHONPATH=$PYFLEXROOT/bindings/build${PYTHONPATH:+:$PYTHONPATH}
 # 헤드리스 실행
 export WANDB_MODE=${WANDB_MODE:-disabled}      # dino_wm 은 wandb 를 부른다. 결과는 로컬 파일로 남긴다
 export SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-dummy}  # pusht (pygame)
-export EGL_GPU=${EGL_GPU:-0}                   # PyFleX: EGL device platform 사용 (DISPLAY 가 설정돼 있어도 X 를 거치지 않는다)
+export EGL_GPU=${EGL_GPU:-0}                   # PyFleX: FleX 를 렌더링할 EGL 장치 번호 (device platform 이라 DISPLAY 가 있어도 X 를 거치지 않는다)
 export HYDRA_FULL_ERROR=1

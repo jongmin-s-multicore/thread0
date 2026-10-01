@@ -131,7 +131,7 @@ upstream `train.py` 의 검증과 같은 계산(`model.eval()`, `model(obs, act)
 
 ## 6. upstream 코드·논문과 다른 점
 
-코드 변경은 upstream `0a9492f` 위의 커밋이다 (9개 파일, 고친 곳마다 `[repro]` 주석, `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`). SDPA·성공 에피소드 생략은 `queue/run_plan.sh` 가 기본으로 켜고, 청크 크기는 GPU 메모리에 맞춰 머신별로 준다 (README "머신별 설정"). `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.
+코드 변경은 upstream `0a9492f` 위의 커밋이다 (9개 파일, 수정 블록마다 `[repro]` 주석, `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`). SDPA·성공 에피소드 생략은 `queue/run_plan.sh` 가 기본으로 켜고, 청크 크기는 GPU 메모리에 맞춰 머신별로 준다 (README "머신별 설정"). `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.
 
 | 변경 | 이유 | 결과에 주는 영향 (확인 방법) |
 |---|---|---|
@@ -157,7 +157,7 @@ upstream `train.py` 의 검증과 같은 계산(`model.eval()`, `model(obs, act)
 | 항목 | 값 |
 |---|---|
 | world model 롤아웃 300 샘플 × 5 스텝, h=3 (PointMaze), RTX 3090 Ti 단독 | 원본 attention 3.8 s, SDPA 3.0 s |
-| 같은 것, h=1 (Wall) | 원본 1.3 s (단독). SDPA 는 GPU 를 다른 작업과 나눠 쓰는 중에만 쟀다 (원본 2.2 s → 1.8 s) |
-| CEM opt step 1번 (에피소드 50개, MPC 1회차) | PointMaze 약 371 s, PushT 약 373 s — RTX 3090 한 장에서 두 작업이 함께 돌 때, `plan_0_output_<k>.png` 저장 시각 간격 |
-| Rope 학습 1 epoch (535 iteration + 검증) | RTX 3090 Ti 에서 약 5분 (다른 작업이 거의 없을 때), Wall MPC 와 함께 돌 때 8.5–10.3분 — `rollout_plots/e<k>_rollout` 생성 시각 간격 |
+| 같은 것, h=1 (Wall) | 원본 1.3 s (단독). SDPA 는 GPU 를 다른 작업과 나눠 쓰는 중에만 쟀다 (원본 2.2 s → 1.8 s, 단독 값과 비교할 수 없다) |
+| CEM opt step 1번 (에피소드 50개, MPC 1회차) | PointMaze 약 371 s, PushT 약 373 s — 24 GB GPU 하나를 두 planning 작업이 나눠 쓸 때 (단독이 아니다), `plan_0_output_<k>.png` 저장 시각 간격 |
+| Rope 학습 1 epoch (535 iteration + 검증) | RTX 3090 Ti 에서 약 5분 (GPU 를 거의 혼자 쓸 때), planning 작업과 GPU 를 나눠 쓸 때 8.5–10.3분 — `rollout_plots/e<k>_rollout` 생성 시각 간격 |
 | FleX 롤아웃 (env 1개, prepare 포함 push 3번) | Rope 18.7 s, Granular 45 s |

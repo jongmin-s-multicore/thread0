@@ -46,10 +46,15 @@ def status(job):
     return "failed" if "END" in open(f"{d}/run_info.txt").read() else "running"
 
 
-def started(job):
+def started(job, path):
+    """시작한 날: $DINO_RUNS/<job>/run_info.txt, 없으면 기존 run.yaml 의 date 를 유지한다."""
     p = os.path.join(RUNS, job, "run_info.txt")
     if os.path.exists(p):
         m = re.search(r"START (\d{4}-\d{2}-\d{2})", open(p).read())
+        if m:
+            return m.group(1)
+    if os.path.exists(path):
+        m = re.search(r"^date: '?([0-9-]+)'?$", open(path).read(), flags=re.M)
         if m:
             return m.group(1)
     return None
@@ -94,12 +99,12 @@ def dump(path, d, header):
 
 
 HEADER = "# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다."
-CODE = "이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . ':!repro')"
+CODE = "이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')"
 RUNNER_ENV = "DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_plan.sh 기본값). 롤아웃·GD 청크는 메모리 조정이라 결과와 무관하고 머신마다 준다"
 written = []
 for j in parse_jobs():
     name, kind, args = j["name"], j["kind"], j["args"]
-    common = dict(stack="dinowm", job=name, date=started(name) or "-")  # date = 시작한 날 ('-' = 아직 안 돌았다)
+    common = dict(stack="dinowm", job=name)
     if kind == "train":
         obj = hydra_args(args)["env.dataset.object_name"]
         rid = f"dinowm_{obj}-dinov2s14-100ep"
@@ -179,6 +184,7 @@ for j in parse_jobs():
                  command=f"bash repro/queue/run_cmd.sh {name} <gpu> " + " ".join(args), code=CODE,
                  output=out, results="output json 의 pred_lpips, pred_ssim")
         path = os.path.join(EXP, "runs", "eval", rid, "run.yaml")
+    d = {**{k: d[k] for k in ("id", "kind", "stack", "job")}, "date": started(name, path) or "-", **{k: v for k, v in d.items() if k not in ("id", "kind", "stack", "job")}}
     dump(path, d, HEADER)
     written.append(os.path.relpath(path, EXP))
 print("\n".join(written))

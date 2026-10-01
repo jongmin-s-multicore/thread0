@@ -16,6 +16,7 @@ protocol:
 command: >-
   bash repro/queue/run_cmd.sh pq_pusht <gpu> python $THREAD0/repro/eval/eval_pred_quality.py
   $DINO_CKPT pusht $DINO_WORK/results/pred_quality/pusht.json 5000
-code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'
+code: >-
+  이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
 output: $DINO_WORK/results/pred_quality/pusht.json
 results: 'output json 의 pred_lpips, pred_ssim'

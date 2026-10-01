@@ -39,7 +39,7 @@ repro/
     └── conda-dinowm.txt           conda 패키지 목록 (micromamba list)
 ```
 
-run-id 형식은 `<모델>-<초기값>[-<총량>][-at<체크포인트>][-<변형>]` 이다 ([AGENTS.md §2](../AGENTS.md#2-실험-디렉토리-구조)). job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다.
+run-id 형식은 `<모델>-<초기값>[-<총량>][-at<체크포인트>][-<변형>]` 이다 ([AGENTS.md §2](../AGENTS.md#2-재현-디렉토리-구조)). job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다.
 
 | run-id | job | 내용 |
 |---|---|---|
@@ -63,7 +63,7 @@ run-id 형식은 `<모델>-<초기값>[-<총량>][-at<체크포인트>][-<변형
 | 주요 패키지 | torch 2.3.0+cu121, torchvision 0.18.0, gym 0.23.1, mujoco-py 2.1.2.14, d4rl 1.1, hydra-core 1.2.0, pymunk 6.8.0 |
 | MuJoCo | 2.1.0 (`~/.mujoco/mujoco210`). mujoco-py 는 EGL(GPU) 빌더로 컴파일됐다 |
 | DINOv2 | `models/dino.py` 가 `facebookresearch/dinov2:85a2460` 을 torch.hub 로 받는다 (현재 main 은 Python 3.10 문법) |
-| PyFleX | AdaptiGraph `a7c7535` 의 PyFleX, `xingyu/softgym` 도커(CUDA 9.2)에서 빌드. 헤드리스 EGL (`EGL_GPU=0`) |
+| PyFleX | AdaptiGraph `a7c7535` 의 PyFleX, `xingyu/softgym` 도커(CUDA 9.2)에서 빌드. 헤드리스 EGL — `EGL_GPU` 는 렌더링할 EGL 장치 번호 (기본 0, 작업의 GPU 와 따로 정해진다. 바꾸려면 overlay 에 `env:EGL_GPU=N`) |
 | GPU (검증) | RTX 3090 Ti 24 GB + RTX 3090 24 GB, 드라이버 580.178.04 |
 
 ## 데이터·체크포인트
@@ -104,7 +104,7 @@ python repro/eval/eval_pred_quality.py $DINO_CKPT pusht $DINO_WORK/results/pred_
 
 - 산출물: planning 은 `$DINO_RUNS/<job>/` 에 `logs.json`(MPC 반복별 `mpc/*`, 마지막 `final_eval/*`), `plan_targets.pkl`(시작·목표, `goal_source=file` 로 재사용 가능), 그림·영상. 학습은 `$DINO_TRAIN/outputs/<job>/` 에 `hydra.yaml`, `checkpoints/model_<epoch>.pth`, `epoch_logs.jsonl`.
 - 같은 job 을 다시 돌리려면 `$DINO_RUNS/<job>/` 를 지우거나 옮긴다 (`DONE` 이 있으면 건너뛴다).
-- `DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0` 은 수정의 선택 부분만 끈다. 평가 디코딩·`train.py` 검증·`flex_env.py`·DINOv2 고정은 항상 켜져 있다. upstream 코드 그대로 돌리려면 `git checkout 0a9492f -- models planning train.py env` 처럼 파일을 되돌린다.
+- `DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0` 은 수정의 선택 부분만 끈다. 평가 디코딩·`train.py` 검증·`flex_env.py`·DINOv2 고정은 항상 켜져 있다. upstream 코드 그대로 돌리려면 `git checkout 0a9492f -- models planning train.py env ':!models/dino.py'` 처럼 파일을 되돌린다 (`models/dino.py` 의 DINOv2 고정은 Python 3.9 에서 필요하다).
 
 ### 머신별 설정 (레포에 올리지 않는다)
 

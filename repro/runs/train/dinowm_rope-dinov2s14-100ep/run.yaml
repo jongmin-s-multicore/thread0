@@ -26,4 +26,5 @@ command: >-
   env.kwargs.object_name=rope frameskip=1 num_hist=1 training.save_every_x_epoch=10
 output: >-
   $DINO_TRAIN/outputs/train_rope/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)
-code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'
+code: >-
+  이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')

@@ -21,12 +21,13 @@ for i in range(torch.cuda.device_count()):
 step "mujoco-py"
 python -c "import mujoco_py; print('mujoco_py', mujoco_py.__version__)" 2>&1 | grep -v -i warn || bad mujoco_py
 
-step "DINOv2 (torch.hub 고정 커밋, Python 3.9)"
+step "DINOv2 (models/dino.py 의 고정 커밋 85a2460, Python 3.9)"
 (cd "$DINO_WM" && python -c "
 import torch
-m = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14').cuda().eval()
-with torch.no_grad(): o = m.forward_features(torch.randn(1, 3, 196, 196).cuda())
-print('patch tokens', tuple(o['x_norm_patchtokens'].shape))
+from models.dino import DinoV2Encoder
+m = DinoV2Encoder('dinov2_vits14', 'x_norm_patchtokens').cuda().eval()
+with torch.no_grad(): o = m(torch.randn(1, 3, 196, 196).cuda())
+print('patch tokens', tuple(o.shape))
 " 2>&1 | tail -1) || bad dinov2
 
 step "공개 체크포인트로 env 렌더·동역학 대조 (데이터셋 프레임과 픽셀 MAE, 0~255)"
