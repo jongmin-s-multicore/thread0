@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 from einops import rearrange
@@ -91,13 +92,21 @@ class GDPlanner(BasePlanner):
 
         for i in range(self.opt_steps):
             optimizer.zero_grad()
-            i_z_obses, i_zs = self.wm.rollout(
-                obs_0=trans_obs_0,
-                act=actions,
-            )
-            loss = self.objective_fn(i_z_obses, z_obs_g_detached)  # (n_evals, )
-            total_loss = loss.mean() * n_evals  # loss for each eval is independent
-            total_loss.backward()
+            # [repro] optional chunked forward/backward to fit 24GB GPUs; per-eval losses are
+            # independent and summed, so gradients are identical to the unchunked version
+            chunk = int(os.environ.get("DINO_WM_GD_CHUNK", "0")) or n_evals
+            total_loss = 0.0
+            for c in range(0, n_evals, chunk):
+                i_z_obses, i_zs = self.wm.rollout(
+                    obs_0={k: v[c : c + chunk] for k, v in trans_obs_0.items()},
+                    act=actions[c : c + chunk],
+                )
+                loss = self.objective_fn(
+                    i_z_obses, {k: v[c : c + chunk] for k, v in z_obs_g_detached.items()}
+                )  # (chunk, )
+                chunk_loss = loss.sum()  # loss for each eval is independent
+                chunk_loss.backward()
+                total_loss = total_loss + chunk_loss.detach()
             with torch.no_grad():
                 actions_new = actions - optimizer.param_groups[0]["lr"] * actions.grad
                 actions_new += (
