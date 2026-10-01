@@ -24,7 +24,7 @@
 
 ## 환경별 브랜치
 
-GPU 환경에 맞춘 구현(메모리·속도 수정, 러너 기본값)과 그 환경에서 돌린 실행 기록은 main 에 넣지 않고 브랜치에 둡니다. 브랜치는 main 을 따라가며(`git rebase main`) 그 위에 커밋을 더합니다.
+GPU 환경에 맞춘 구현(메모리·속도 수정, 러너 기본값)과 그 환경에서 돌린 실행 기록은 main 에 넣지 않고 브랜치에 둡니다. 브랜치는 main 을 `git merge main` 으로 따라가며 그 위에 커밋을 더합니다 (이슈에 적은 커밋 해시가 사라지지 않게 rebase·force push 는 하지 않습니다).
 
 | 브랜치 | 환경 | 더한 것 |
 |---|---|---|
@@ -56,7 +56,7 @@ bash repro/setup/check_env.sh --pyflex   # + PyFleX, Rope·Granular
 python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
   n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
 
-# 5. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(예: hanbin5/local)를 쓴다 — repro/README.md "머신별 설정"
+# 5. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(아래 "환경별 브랜치")를 쓴다. 큐 설정은 repro/README.md "머신별 설정"
 bash repro/queue/start.sh
 ```
 
@@ -71,8 +71,7 @@ repro/
   queue/                 파일 상태 기반 GPU 작업 큐와 러너
   jobs/benchmark.txt     벤치마크 작업 목록
   eval/                  예측 품질(LPIPS·SSIM), 결과 요약
-  make_run_yaml.py       runs/*/run.yaml 생성
-  runs/{train,eval}/<run-id>/run.yaml   실행별 설정 기록 (결과 수치는 이슈에)
+  (환경 브랜치에만) LOCAL.md, make_run_yaml.py, runs/{train,eval}/<run-id>/run.yaml — 그 환경의 수정·실행 기록
   requirements/          환경 패키지 목록 (pip freeze, conda list)
 AGENTS.md                저장소 운영 규약
 README_upstream.md       upstream README

@@ -37,7 +37,7 @@ repro/
     └── conda-dinowm.txt           conda 패키지 목록 (micromamba list)
 ```
 
-job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 기록(`repro/runs/<run-id>/run.yaml`, run-id 형식은 [AGENTS.md §2](../AGENTS.md#2-재현-디렉토리-구조))은 그 실행을 돌린 환경 브랜치에 둔다.
+job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 기록(`repro/runs/{train,eval}/<run-id>/run.yaml`, run-id 형식은 [AGENTS.md §2](../AGENTS.md#2-재현-디렉토리-구조))은 그 실행을 돌린 환경 브랜치에 둔다.
 
 ---
 
@@ -118,7 +118,7 @@ export DINO_JOBS_LOCAL=${DINO_JOBS_LOCAL:-$THREAD0/.claude/jobs.local.txt}
 
 ## 결과와 코드 버전
 
-결과는 GitHub 이슈로 올리고, 그 결과를 낸 브랜치와 커밋 해시를 적는다. 러너는 `run_info.txt` 에 브랜치·커밋·`DINO_WM_*` 환경변수를 기록한다.
+결과는 GitHub 이슈로 올리고, 그 결과를 낸 브랜치와 커밋 해시를 적는다. 러너(`run_plan.sh`·`run_train.sh`·`run_cmd.sh`)는 `run_info.txt` 에 브랜치·커밋·`DINO_WM_*` 환경변수를 기록한다 (이 형식 전에 시작한 실행의 run_info 에는 브랜치·커밋이 없다 — 그 경우 환경 브랜치 문서에 대응을 적는다).
 
 ## 라이선스 주의
 

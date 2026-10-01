@@ -9,7 +9,7 @@ main() {
   if [ -f "$OUT/DONE" ]; then echo "$NAME already done"; return 0; fi
   mkdir -p "$OUT"
   cd "$DINO_WM"
-  echo "START $(date -Is) pid=$$ gpu=$GPU branch=$(git -C "$DINO_WM" rev-parse --abbrev-ref HEAD 2>/dev/null) commit=$(git -C "$DINO_WM" rev-parse --short HEAD 2>/dev/null) cmd=$*" > "$OUT/run_info.txt"
+  echo "START $(date -Is) pid=$$ gpu=$GPU branch=$(git -C "$DINO_WM" rev-parse --abbrev-ref HEAD 2>/dev/null) commit=$(git -C "$DINO_WM" rev-parse --short HEAD 2>/dev/null) env=[$(env | grep -E '^DINO_WM_' | sort | tr '\n' ' ')] cmd=$*" > "$OUT/run_info.txt"
   CUDA_VISIBLE_DEVICES=$GPU bash -c "$*" > "$DINO_RUNS/$NAME.log" 2>&1
   RC=$?
   echo "END $(date -Is) rc=$RC" >> "$OUT/run_info.txt"

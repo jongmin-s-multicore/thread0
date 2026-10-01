@@ -1,4 +1,4 @@
-# DINO-WM 벤치마크 작업 목록 (seed 99). 형식은 queue/scheduler.py 머리말. run-id 와의 대응은 runs/*/run.yaml 의 job 필드.
+# DINO-WM 벤치마크 작업 목록 (seed 99). 형식은 queue/scheduler.py 머리말. run-id 와의 대응은 환경 브랜치의 repro/runs/*/*/run.yaml 의 job 필드 (AGENTS.md §2).
 # 무엇을 어떤 설정으로 돌리는지만 적는다. 위에서부터 GPU 슬롯이 나는 대로 시작한다. 작업별 GPU 고정·메모리 조건은
 # 머신마다 다르므로 overlay 파일(DINO_JOBS_LOCAL)로 준다 — repro/README.md "실행".
 
