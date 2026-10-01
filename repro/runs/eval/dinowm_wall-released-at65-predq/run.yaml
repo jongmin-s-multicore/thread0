@@ -1,0 +1,21 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_wall-released-at65-predq
+kind: eval
+stack: dinowm
+job: pq_wall
+date: '-'
+env: wall
+model:
+  ckpt: $DINO_CKPT/outputs/wall_single/checkpoints/model_latest.pth
+  epoch: 65
+protocol:
+  split: '검증 분할 (PushT 는 val 폴더 21 궤적, 그 밖은 학습과 같은 seed 42 궤적 분할)'
+  samples: 슬라이스 전체. 5000 개를 넘으면 seed(training.seed) 로 만든 슬라이스 순서에서 균등 간격 5000 개
+  metric: >-
+    model.eval() 의 1-step 예측을 디코딩해 정답 프레임과 LPIPS(VGG)·SSIM(11×11) — upstream train.py 검증과 같은 계산
+command: >-
+  bash repro/queue/run_cmd.sh pq_wall <gpu> python $THREAD0/repro/eval/eval_pred_quality.py $DINO_CKPT
+  wall_single $DINO_WORK/results/pred_quality/wall.json 5000
+code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'
+output: $DINO_WORK/results/pred_quality/wall.json
+results: 'output json 의 pred_lpips, pred_ssim'

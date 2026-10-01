@@ -1,0 +1,34 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_pusht-released-at2-mpccem
+kind: eval
+stack: dinowm
+job: pusht_mpc
+date: 2026-10-01
+env: pusht
+model:
+  source: 공개 체크포인트 (OSF checkpoints/outputs.zip)
+  ckpt: $DINO_CKPT/outputs/pusht/checkpoints/model_latest.pth
+  epoch: 2
+  num_hist: 3
+  frameskip: 5
+planner:
+  name: MPC-CEM (upstream 설정 파일 내장)
+  cem: 'horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps 30'
+  n_taken_actions: goal_H 5 (plan.py 가 덮어쓴다)
+  max_iter: '10 (원본 null = 무제한)'
+  eval_every: 1
+protocol:
+  n_evals: 50
+  goal_source: dset
+  goal_H: 5
+  objective: '마지막 프레임 latent MSE, alpha 1'
+  seed: 99
+command: >-
+  bash repro/queue/run_plan.sh pusht_mpc <gpu> --config-name plan_pusht.yaml model_name=pusht
+  planner.max_iter=10
+runner_env: >-
+  DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_plan.sh 기본값). 롤아웃·GD 청크는 메모리 조정이라 결과와 무관하고 머신마다 준다
+code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'
+output: $DINO_RUNS/pusht_mpc/
+results: >-
+  logs.json 의 mpc/success_rate (step k = MPC k회 예산, sticky). step 1 = 오픈루프 CEM (SETTINGS.md §5.3)

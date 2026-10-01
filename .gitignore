@@ -1,4 +1,52 @@
+# upstream (gaoyuezhou/dino_wm)
 __pycache__
 *.pyc
 outputs
 plan_outputs
+
+# 데이터·가중치·실행 산출물은 레포 밖($DINO_WORK)에 둔다. 레포 안에 생겨도 커밋하지 않는다
+*.pth
+*.pt
+*.pkl
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+*.so
+*.zip
+*.z0[0-9]
+*.h5
+*.mp4
+*.png
+!assets/*.png
+*.log
+*.nohup
+*.jsonl
+logs.json
+run_info.txt
+DONE
+.hydra/
+wandb/
+.env
+.pytest_cache/
+
+# 머신별 설정·실행 이력·에이전트 메모 (.claude/env.local.sh 등). 레포에 올리지 않는다
+.claude/
+
+# DINO_WORK 를 실수로 레포 안에 잡았을 때 생기는 디렉토리 (repro/env.sh 가 경고한다)
+/envs/
+/tools/
+/PyFleX/
+/data/
+/checkpoints/
+/train_runs/
+/runs/
+/results/
+/downloads/
+/torch_home/
+/setup_check/
+
+# repro/runs 는 run.yaml 만 추적한다
+/repro/runs/**
+!/repro/runs/**/
+!/repro/runs/**/run.yaml

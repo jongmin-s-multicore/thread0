@@ -1,0 +1,30 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_granular-dinov2s14-100ep
+kind: train
+stack: dinowm
+job: train_granular
+date: 2026-10-01
+env: granular
+dataset: '$DATASET_DIR/deformable/granular (1000 궤적 × 20 프레임, 무작위 0.9/0.1 seed 42)'
+model:
+  encoder: 'DINOv2 ViT-S/14 patch tokens, 동결 (hub 85a2460)'
+  predictor: 'ViT depth 6, heads 16, mlp 2048, dropout 0.1'
+  decoder: VQ-VAE decoder (quantize False)
+  num_hist: 1
+  num_pred: 1
+  frameskip: 1
+  img_size: 224
+training:
+  epochs: 100
+  batch_size: 32
+  optimizer: 'predictor·action encoder AdamW, decoder Adam'
+  lr: 'decoder 3e-4, predictor 5e-4, action encoder 5e-4 (upstream 기본값)'
+  seed: 0
+  save_every_x_epoch: 10
+command: >-
+  bash repro/queue/run_train.sh train_granular <gpu> env=deformable_env
+  env.dataset.object_name=granular env.kwargs.object_name=granular frameskip=1 num_hist=1
+  training.save_every_x_epoch=10
+output: >-
+  $DINO_TRAIN/outputs/train_granular/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)
+code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'

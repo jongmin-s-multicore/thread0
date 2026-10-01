@@ -1,0 +1,35 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_granular-dinov2s14-100ep-at100-mpccem
+kind: eval
+stack: dinowm
+job: granular_mpc
+date: '-'
+env: granular
+model:
+  source: 직접 학습 runs/train/dinowm_granular-dinov2s14-100ep
+  ckpt: $DINO_TRAIN/outputs/train_granular/checkpoints/model_latest.pth
+  epoch: 100
+  num_hist: 1
+  frameskip: 1
+planner:
+  name: MPC-CEM (conf/planner/mpc_cem.yaml)
+  cem: 'horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps 30'
+  n_taken_actions: goal_H 5
+  max_iter: '5 (원본 null = 무제한; deformable 은 success 가 항상 False)'
+  eval_every: 1000 (내부 CEM 시뮬 평가는 opt step 0 에서만)
+protocol:
+  n_evals: 10
+  goal_source: random_state
+  goal_H: 5
+  objective: '마지막 프레임 latent MSE, alpha 1 (plan.yaml 기본값)'
+  seed: 99
+command: >-
+  CKPT_BASE=$DINO_TRAIN bash repro/queue/run_plan.sh granular_mpc <gpu> --config-name plan.yaml
+  model_name=train_granular planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000
+  n_evals=10 goal_source=random_state goal_H=5
+runner_env: >-
+  DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_plan.sh 기본값). 롤아웃·GD 청크는 메모리 조정이라 결과와 무관하고 머신마다 준다
+code: '이 레포: gaoyuezhou/dino_wm 0a9492f + 재현 커밋 (git diff 0a9492f -- . '':!repro'')'
+output: $DINO_RUNS/granular_mpc/
+results: 'logs.json 의 mpc/mean_chamfer_distance (반복별), final_eval/mean_chamfer_distance'
+job_env: 'CKPT_BASE=$DINO_TRAIN (jobs/benchmark.txt)'
