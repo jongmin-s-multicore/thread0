@@ -129,12 +129,19 @@ class PlanEvaluator:  # evaluator for planning
 
         # plot trajs
         if self.wm.decoder is not None:
-            i_visuals = self.wm.decode_obs(i_z_obses)[0]["visual"]
+            # [repro] only the first n_plot_samples are plotted, so only decode those
+            # (avoids OOM on long MPC rollouts; metrics are computed above and unaffected)
+            n_plot = self.n_plot_samples
+            with torch.no_grad():  # decode one trajectory at a time (frames grow with MPC iterations)
+                i_visuals = torch.cat([
+                    self.wm.decode_obs({k: v[j : j + 1] for k, v in i_z_obses.items()})[0]["visual"].cpu()
+                    for j in range(min(n_plot, actions.shape[0]))
+                ])
             i_visuals = self._mask_traj(
-                i_visuals, action_len + 1
+                i_visuals, action_len[:n_plot] + 1
             )  # we have action_len + 1 states
-            e_visuals = self.preprocessor.transform_obs_visual(e_visuals)
-            e_visuals = self._mask_traj(e_visuals, action_len * self.frameskip + 1)
+            e_visuals = self.preprocessor.transform_obs_visual(e_visuals[:n_plot])
+            e_visuals = self._mask_traj(e_visuals, action_len[:n_plot] * self.frameskip + 1)
             self._plot_rollout_compare(
                 e_visuals=e_visuals,
                 i_visuals=i_visuals,
@@ -143,6 +150,7 @@ class PlanEvaluator:  # evaluator for planning
                 filename=filename,
             )
 
+        torch.cuda.empty_cache()  # [repro] release eval peaks so co-located jobs fit on a 24GB GPU
         return logs, successes, e_obses, e_states
 
     def _compute_rollout_metrics(self, e_state, e_obs, i_z_obs):
