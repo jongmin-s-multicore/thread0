@@ -106,6 +106,8 @@ upstream 설정 파일 그대로이고, 바꾼 값은 굵게 표시했다.
 
 - `goal_H=5` 는 macro action 5개다. frameskip 5 인 환경에서는 env 25 스텝, Rope·Granular 는 push 5번이다.
 - PushT 의 `dset` 목표는 검증 궤적의 구간을 env 에서 재생해 25 스텝 뒤 상태를 목표로 삼는다 (25 스텝 안에 도달 가능).
+- PushT 화면의 연두색 T 는 원래 PushT 의 고정 목표 (256, 256, π/4) 로, env 가 항상 그리고 학습 데이터에도 들어 있다. planning 목표가 아니다. 목표는 평가 영상·그림의 오른쪽 칸(목표 상태를 렌더한 이미지)이고, `plan.py` 가 왼쪽 칸에 목표 블록 자세를 빨간 윤곽으로 그린다 (그림·영상에만, 관측과 지표는 그대로). 평가 영상의 칸 라벨: `Real` = 실제 env, `Model` = 월드모델 예측, `Goal` = 목표. 이 윤곽이 없는 예전 영상은 `repro/eval/pusht_goal_overlay.py` 로 그린다.
+- PointMaze 화면에는 에이전트(초록 점)만 있고, env 는 목표 마커를 화면 밖에 둔다 (`with_target=False`). `plan.py` 가 평가 영상·그림의 왼쪽 칸에 목표 위치(state_g[:2])를 중심으로 빨간 원(반지름 = 성공 반경 0.5)과 안쪽으로 짧은 눈금 넷을 그린다 (그림·영상에만). 성공 판정은 상태로 하고 env 는 물리 하위 스텝(0.01 초) 하나 전 위치를 그리므로, 경계 가까이에서 끝난 에피소드는 마지막 프레임의 초록 점이 원 바로 안팎에 보일 수 있다 (지연은 속도 × 0.01, 최고 속도에서 약 0.07). 이 표시가 없는 예전 영상은 `repro/eval/pointmaze_goal_overlay.py` 로 그린다 (목표는 실행 디렉토리의 `plan_targets.pkl`).
 - PointMaze `random_state`: U-maze 빈 공간에서 시작·목표를 독립으로 뽑는다. Wall: 시작과 목표를 벽 반대편 방에서 뽑고, 벽·문 위치는 검증 궤적에서 가져온다.
 - Rope·Granular `random_state`: 시작은 검증 분할의 무작위 궤적에서 무작위 시점(0–18)의 입자 상태, 목표는 reset 한 모양을 평행이동·회전(Rope) 또는 평행이동·축소(Granular)한 입자 배치다 (`plan.py` `prepare_targets`, `FlexEnvWrapper.sample_random_init_goal_states`).
 
@@ -131,7 +133,7 @@ upstream `train.py` 의 검증과 같은 계산(`model.eval()`, `model(obs, act)
 
 ## 6. upstream 코드·논문과 다른 점
 
-main 의 코드 변경은 upstream `0a9492f` 위의 커밋이다 (3개 파일, 수정 블록마다 `[repro]` 주석, `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`). `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.
+main 의 코드 변경은 upstream `0a9492f` 위의 커밋이다 (7개 파일, 수정 블록마다 `[repro]` 주석, `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`). `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.
 GPU 환경에 맞춘 메모리·속도 수정(예: 24 GB GPU 용 attention·청크·평가 디코딩)은 main 에 두지 않고 환경별 브랜치에 둔다 — 예: [`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local) 의 `repro/LOCAL.md`.
 
 | 변경 | 이유 | 결과에 주는 영향 (확인 방법) |
@@ -140,6 +142,9 @@ GPU 환경에 맞춘 메모리·속도 수정(예: 24 GB GPU 용 attention·청�
 | `train.py` 가 epoch 지표를 `epoch_logs.jsonl` 에도 쓴다 | wandb 를 끄고 돌린다 (`WANDB_MODE=disabled`) | 없음 |
 | `flex_env.py`: `pyflex.init()` 을 프로세스당 한 번만 | `plan.py` 가 한 프로세스에 FlexEnv 10개를 만들면 4–7번째에서 segfault | env 마다 `set_scene` 으로 장면을 다시 만들고 롤아웃은 env 단위로 순차 실행된다. 같은 초기 상태·행동에서 10개 env 결과가 같았다 |
 | Rope·Granular 내부 CEM 의 시뮬 평가를 opt step 0 에서만 (`planner.sub_planner.eval_every=1000`) | FleX 롤아웃이 push 한 번에 수 초 걸린다 | deformable 은 success 가 항상 False 라 조기 종료가 일어나지 않는다. 계획 결과는 같고 중간 로그만 줄어든다 |
+| PushT 평가 그림·영상의 왼쪽 칸(실제 env, 월드모델 예측)에 목표 블록 자세를 빨간 윤곽으로 (`plan.py`, `planning/evaluator.py`, `env/pusht/goal_outline.py`) | env 가 항상 그리는 연두색 T 는 고정 목표 (256, 256, π/4) 라 planning 목표(state_g)와 관계없어 영상을 잘못 읽게 된다 (§5.1) | 그림·영상만 바뀐다. 성공 판정·지표는 그리기 전에 계산하고 관측은 그대로다 (윤곽을 켜고 끈 같은 설정의 실행에서 `logs.json`·`plan_targets.pkl` 내용 동일) |
+| PointMaze 평가 그림·영상의 왼쪽 칸에 목표 위치를 빨간 원(성공 반경 0.5)과 안쪽 눈금으로 (`plan.py`, `planning/evaluator.py`, `env/pointmaze/goal_marker.py`) | env 가 목표를 그리지 않아(목표 마커는 화면 밖) 에이전트가 어디로 가야 하는지 오른쪽 칸과 견줘야만 보인다 | 그림·영상만 바뀐다. 성공 판정·지표는 그리기 전에 계산하고 관측은 그대로다 (같은 설정으로 표시를 그리는 실행과 그리기 함수를 항등 함수로 바꾼 실행에서 `logs.json`·`plan_targets.pkl` 바이트 단위로 동일, PointMaze MPC 에피소드 10개) |
+| 평가 영상(모든 환경·planner, `planning/evaluator.py`): 칸마다 한 단어 라벨 — 왼쪽 위 `Real`(실제 env 에서 행동을 실행한 화면), 왼쪽 아래 `Model`(같은 행동을 월드모델로 굴려 decoder 로 그린 예측), 오른쪽 `Goal`. 샘플마다 실행한 마지막 프레임(`action_len·frameskip+1`)에서 끊고 그 프레임을 3초(36 프레임) 더 보여 준다 | upstream 은 배치에서 가장 긴 롤아웃 길이로 저장해, MPC 에서 일찍 성공한 에피소드는 성공 뒤가 가려진 회색 프레임으로 채워진다. 위아래 줄이 무엇인지 화면에 없다 | 영상만 바뀐다 (프레임 수 = 실행 길이 + 36). png 그리드·성공 판정·지표는 그대로 (같은 설정의 실행에서 `logs.json` 동일) |
 | `models/dino.py`: DINOv2 hub 코드를 `facebookresearch/dinov2:85a2460` 으로 고정 | 현재 main 은 Python 3.10 문법 (issue #25) | 가중치(`dinov2_vits14_pretrain.pth`)는 같다. 고정 커밋과 이전에 쓴 hub 캐시(같은 커밋)의 patch 특징 차이 0 |
 
 시뮬레이터 대조 (`repro/setup/check_env.sh`): PointMaze 는 데이터셋 프레임·상태와 완전히 같다. PushT 는 상태가 같고 픽셀 MAE 0.3/255. Wall 은 프레임이 같고, 데이터셋의 상태 배열은 env 상태와 1스텝부터 다르다(기록 방식 차이로 보인다. 성공 판정은 env 상태끼리 비교하므로 영향 없다). Granular 는 3스텝까지 완전히 같다. Rope 는 2스텝까지 입자 위치 오차 3e-4, 3–4스텝에서 평균 0.013–0.019 (이동량 약 1.0 대비, 재실행해도 같은 값).

@@ -12,6 +12,32 @@ from utils import (
     concat_trajdict,
 )
 from torchvision import utils
+import cv2  # [repro]
+
+# [repro] one-word labels for the 2x2 eval video frame: [row][col] = [env rollout, goal], [world-model rollout, goal]
+VIDEO_PANEL_LABELS = (("Real", "Goal"), ("Model", "Goal"))
+VIDEO_FPS = 12  # [repro] upstream's eval video frame rate
+VIDEO_HOLD_SEC = 3  # [repro] each eval video ends by holding its last executed frame this long
+
+
+def label_video_panels(frame, labels=VIDEO_PANEL_LABELS):
+    """[repro] Write a label in the top-left corner of each panel of a 2x2 video frame (uint8, H x W x 3).
+
+    Returns the labeled frame (drawn in place if frame is already C-contiguous, else on a contiguous copy).
+    """
+    frame = np.ascontiguousarray(frame)  # frames built from permuted tensors are not C-contiguous; cv2 needs it
+    ph, pw = frame.shape[0] // 2, frame.shape[1] // 2
+    # sized for 224 px panels (font scale 0.45, 1 px stroke, 2 px padding) and scaled with the panel height;
+    # repro/eval/video_format.label_boxes recomputes the boxes from this formula
+    scale, thick, pad = ph / 500, max(1, round(ph / 224)), max(2, round(ph / 112))
+    for r, row in enumerate(labels):
+        for c, text in enumerate(row):
+            (tw, th), base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+            x0, y0 = c * pw, r * ph
+            cv2.rectangle(frame, (x0, y0), (x0 + tw + 2 * pad, y0 + th + base + 2 * pad), (0, 0, 0), -1)
+            cv2.putText(frame, text, (x0 + pad, y0 + pad + th), cv2.FONT_HERSHEY_SIMPLEX, scale,
+                        (255, 255, 255), thick, cv2.LINE_AA)
+    return frame
 
 
 class PlanEvaluator:  # evaluator for planning
@@ -27,6 +53,7 @@ class PlanEvaluator:  # evaluator for planning
         seed,
         preprocessor,
         n_plot_samples,
+        goal_overlay=None,  # [repro] plot-only goal marker (see below)
     ):
         self.obs_0 = obs_0
         self.obs_g = obs_g
@@ -38,6 +65,10 @@ class PlanEvaluator:  # evaluator for planning
         self.seed = seed
         self.preprocessor = preprocessor
         self.n_plot_samples = n_plot_samples
+        # [repro] optional fn(visuals (b, t, c, h, w), goal_states (b, d)) -> visuals that marks the
+        # goal on plotted frames only (PushT: its rendered green T is not the planning goal;
+        # PointMaze: the env renders no goal marker)
+        self.goal_overlay = goal_overlay
         self.device = next(wm.parameters()).device
 
         self.plot_full = False  # plot all frames or frames after frameskip
@@ -148,6 +179,7 @@ class PlanEvaluator:  # evaluator for planning
                 successes=successes,
                 save_video=save_video,
                 filename=filename,
+                action_len=action_len,  # [repro]
             )
 
         torch.cuda.empty_cache()  # [repro] release eval peaks so co-located jobs fit on a 24GB GPU
@@ -194,7 +226,8 @@ class PlanEvaluator:  # evaluator for planning
         return logs, successes
 
     def _plot_rollout_compare(
-        self, e_visuals, i_visuals, successes, save_video=False, filename=""
+        self, e_visuals, i_visuals, successes, save_video=False, filename="",
+        action_len=None,  # [repro] per-sample executed macro actions (inf = all), to end videos there
     ):
         """
         i_visuals may have less frames than e_visuals due to frameskip, so pad accordingly
@@ -204,6 +237,9 @@ class PlanEvaluator:  # evaluator for planning
         """
         e_visuals = e_visuals[: self.n_plot_samples]
         i_visuals = i_visuals[: self.n_plot_samples]
+        if self.goal_overlay is not None:  # [repro] plots only; metrics were computed before this
+            e_visuals = self.goal_overlay(e_visuals, self.state_g[: e_visuals.shape[0]])
+            i_visuals = self.goal_overlay(i_visuals, self.state_g[: i_visuals.shape[0]])
         goal_visual = self.obs_g["visual"][: self.n_plot_samples]
         goal_visual = self.preprocessor.transform_obs_visual(goal_visual)
 
@@ -221,7 +257,12 @@ class PlanEvaluator:  # evaluator for planning
             for idx in range(e_visuals.shape[0]):
                 success_tag = "success" if successes[idx] else "failure"
                 frames = []
-                for i in range(e_visuals.shape[1]):
+                # [repro] end at the last executed frame instead of padding with the masked (gray)
+                # frames that follow an MPC success, then hold that frame for 3 s (see below)
+                n_frames = e_visuals.shape[1]
+                if action_len is not None and np.isfinite(action_len[idx]):
+                    n_frames = min(n_frames, int(action_len[idx]) * self.frameskip + 1)
+                for i in range(n_frames):
                     e_obs = e_visuals[idx, i, ...]
                     i_obs = i_visuals[idx, i, ...]
                     e_obs = torch.cat(
@@ -235,15 +276,15 @@ class PlanEvaluator:  # evaluator for planning
                     frame = rearrange(frame, "w1 w2 c -> (w1) w2 c")
                     frame = frame.detach().cpu().numpy()
                     frames.append(frame)
+                frames += [frames[-1]] * (VIDEO_HOLD_SEC * VIDEO_FPS)  # [repro] hold the last frame
                 video_writer = imageio.get_writer(
-                    f"{filename}_{idx}_{success_tag}.mp4", fps=12
+                    f"{filename}_{idx}_{success_tag}.mp4", fps=VIDEO_FPS
                 )
 
                 for frame in frames:
                     frame = frame * 2 - 1 if frame.min() >= 0 else frame
-                    video_writer.append_data(
-                        (((np.clip(frame, -1, 1) + 1) / 2) * 255).astype(np.uint8)
-                    )
+                    frame = (((np.clip(frame, -1, 1) + 1) / 2) * 255).astype(np.uint8)
+                    video_writer.append_data(label_video_panels(frame))  # [repro] Real / Model / Goal
                 video_writer.close()
 
         # pad i_visuals or subsample e_visuals

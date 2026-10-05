@@ -156,6 +156,21 @@ class PlanWorkspace:
         else:
             self.prepare_targets()
 
+        # [repro] PushT always renders its fixed default target (green T), which is not the planning
+        # goal; outline the goal block pose (state_g) on saved plots/videos. Observations are unchanged.
+        goal_overlay = None
+        if self.env_name == "pusht":
+            from env.pusht.goal_outline import draw_goal_outlines
+            shapes = self.env.get_env_attr("shape")
+            goal_overlay = lambda visuals, goal_states: draw_goal_outlines(
+                visuals, goal_states, shapes[: len(goal_states)]
+            )
+        elif self.env_name == "point_maze":
+            # [repro] PointMaze renders only the agent; mark the goal position (state_g[:2]) with a
+            # ring of the success radius and inward ticks on saved plots/videos. Observations are unchanged.
+            from env.pointmaze.goal_marker import draw_goal_markers
+            goal_overlay = draw_goal_markers
+
         self.evaluator = PlanEvaluator(
             obs_0=self.obs_0,
             obs_g=self.obs_g,
@@ -167,6 +182,7 @@ class PlanWorkspace:
             seed=self.eval_seed,
             preprocessor=self.data_preprocessor,
             n_plot_samples=self.cfg_dict["n_plot_samples"],
+            goal_overlay=goal_overlay,  # [repro]
         )
 
         if self.wandb_run is None or isinstance(

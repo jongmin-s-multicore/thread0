@@ -1,6 +1,6 @@
 # repro — DINO-WM 재현 도구와 실행 방법
 
-이 레포(gaoyuezhou/dino_wm 의 fork)로 DINO-WM 의 planning 벤치마크를 다시 돌리는 방법이다. GPU 환경과 무관한 공용 도구(환경 구축·작업 큐·평가)와 프로토콜을 둔다. GPU 환경에 맞춘 코드 수정과 그 환경의 실행 기록은 환경별 브랜치에 있다 ([루트 README](../README.md#환경별-브랜치)).
+이 레포(gaoyuezhou/dino_wm 의 fork)로 DINO-WM 의 planning 벤치마크를 다시 돌리는 방법이다. GPU 환경과 무관한 공용 도구(환경 구축·작업 큐·평가)와 프로토콜을 둔다. GPU 환경에 맞춘 코드 수정과 그 환경의 실행 기록은 환경별 브랜치에 있다 ([루트 README](../README.md#branches-and-changes-to-upstream)).
 
 - 모델·데이터·하이퍼파라미터·평가 프로토콜·upstream 과 다른 점: **[SETTINGS.md](SETTINGS.md)**
 - 결과와 해석: [이슈](https://github.com/jongmin-s-multicore/thread0/issues)
@@ -31,6 +31,11 @@ repro/
 ├── jobs/benchmark.txt         벤치마크 작업 목록 (job 이름, 종류, 선행 작업, hydra 인자. GPU·메모리 조건은 머신별 overlay)
 ├── eval/
 │   ├── eval_pred_quality.py   검증 분할 전체의 1-step 예측 LPIPS·SSIM
+│   ├── pusht_goal_overlay.py  예전 PushT 평가 영상을 지금 형식으로 (2배 확대): 목표 칸 이미지에서 맞춘 목표 블록 윤곽, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
+│   ├── pointmaze_goal_overlay.py  예전 PointMaze 평가 영상을 지금 형식으로 (2배 확대): 목표 위치(plan_targets.pkl 의 state_g) 원, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
+│   ├── reformat_eval_videos.py    예전 평가 영상을 지금 형식으로, 목표 표시 없이 (Wall 등): Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
+│   ├── video_format.py        위 세 도구가 같이 쓰는 함수 (가려진 회색 프레임 세기, 라벨이 이미 있는지)
+│   ├── deform_arm_video.py    Rope·Granular planning 작업을 다시 돌려, 팔(xArm6)이 미는 중간 프레임까지 담은 평가 영상도 쓴다 (<out_dir>/arm_video/)
 │   └── summarize.py           logs.json·epoch_logs·예측 품질을 $DINO_WORK/results/summary.{md,json} 으로
 └── requirements/
     ├── requirements-dinowm.txt    pip 패키지 목록 (uv pip freeze)
@@ -43,7 +48,60 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
 
 ## 환경
 
-설치는 [루트 README](../README.md#빠른-시작) 의 빠른 시작대로 한다.
+### 설치
+
+```bash
+# 0. 사전 준비: NVIDIA 드라이버, git curl unzip zip, libglew-dev libgl1-mesa-dev (mujoco-py 빌드),
+#    Rope·Granular planning 을 하려면 docker + NVIDIA container runtime (sudo 없이 docker 그룹)
+git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0 && cd ~/thread0
+export DINO_WORK=~/dinowm      # 작업 루트 (기본값, 레포 밖). 머신별 값은 .claude/env.local.sh 에 둘 수 있다 (gitignore)
+
+# 1. 설치: micromamba env (Python 3.9, environment.yaml 고정 버전) + MuJoCo 2.1.0 + mujoco-py 빌드
+bash repro/setup/install_env.sh --dry-run    # 실행할 명령만 확인
+bash repro/setup/install_env.sh
+bash repro/setup/install_pyflex.sh           # Rope·Granular planning 에만 필요 (도커 빌드, 약 1분)
+
+# 2. 데이터와 공개 체크포인트 (OSF). 전부 받으면 zip 21 GB, 풀면 약 236 GB
+bash repro/setup/download_data.sh core checkpoints   # PointMaze·PushT·Wall + 체크포인트만
+bash repro/setup/download_data.sh deformable         # Rope·Granular
+
+# 3. 점검 (레포 루트에서, bash 또는 zsh, 새 셸마다 source)
+source repro/env.sh
+bash repro/setup/check_env.sh            # torch/CUDA, mujoco-py, DINOv2, 공개 체크포인트로 렌더·동역학 대조
+bash repro/setup/check_env.sh --pyflex   # + PyFleX, Rope·Granular
+
+# 4. 공개 체크포인트로 planning 한 번 (PointMaze, 에피소드 2개, 1분 안쪽)
+python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
+  n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
+
+# 5. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(루트 README "Branches and changes to upstream")를 쓴다. 큐 설정은 아래 "머신별 설정"
+bash repro/queue/start.sh
+```
+
+설치 후 디렉터리 (`$DINO_WORK`, 기본 `~/dinowm`):
+
+| 경로 | 내용 |
+|---|---|
+| `envs/dino_wm` | micromamba env (Python 3.9.19, torch 2.3.0+cu121), 9.0 GB |
+| `data/` | `point_maze` `pusht_noise` `wall_single` `deformable/{rope,granular}` (`DATASET_DIR`) |
+| `checkpoints/` | `DINO_CKPT`. 아래 `outputs/{point_maze,pusht,wall_single}` 가 공개 체크포인트 |
+| `torch_home/` | torch.hub 캐시: DINOv2 코드(`85a2460`)와 가중치, LPIPS VGG (`TORCH_HOME`) |
+| `PyFleX/` | AdaptiGraph `a7c7535` 의 PyFleX 와 빌드 결과 (`PYFLEXROOT`) |
+| `train_runs/` `runs/` `results/` | 학습한 world model, planning·평가 산출물, 요약 (`DINO_TRAIN`, `DINO_RUNS`) |
+| `tools/` | micromamba, 설치 중 만든 파일, AdaptiGraph clone |
+| `downloads/` | OSF zip 원본 21 GB. 압축을 푼 뒤에는 지워도 된다 (`DINO_DOWNLOADS`) |
+| `~/.mujoco/mujoco210` | MuJoCo 2.1.0 (`MUJOCO_DIR`) |
+
+설치 스크립트를 확인한 환경:
+
+| 항목 | 값 |
+|---|---|
+| OS | Ubuntu 24.04, NVIDIA driver 580.178.04 |
+| 소프트웨어 | Python 3.9.19 (conda-forge), torch 2.3.0+cu121, mujoco-py 2.1.2.14 (EGL), gym 0.23.1, hydra-core 1.2.0, PyFleX (CUDA 9.2 도커 빌드) |
+
+`repro/setup/` 스크립트는 위 환경에서 손으로 실행한 명령을 옮긴 것이다. 각 명령은 실행해 봤고(pip 설치는 uv 로), 스크립트를 새 머신에서 처음부터 끝까지 돌려 보지는 않았다.
+
+### 설치된 구성
 
 | 항목 | 값 |
 |---|---|
@@ -86,6 +144,17 @@ CKPT_BASE=$DINO_TRAIN bash repro/queue/run_plan.sh rope_mpc <gpu> --config-name 
 
 # 예측 품질
 python repro/eval/eval_pred_quality.py $DINO_CKPT pusht $DINO_WORK/results/pred_quality/pusht.json 5000
+
+# 목표 윤곽이 없는 예전 PushT 영상을 지금 형식으로 다시 쓴다 -> $DINO_RUNS/<job>/goal_overlay/ (원본은 그대로)
+python repro/eval/pusht_goal_overlay.py $DINO_RUNS/pusht_mpc $DINO_RUNS/pusht_gd
+# PointMaze 도 같은 형식으로 (목표는 실행 디렉토리의 plan_targets.pkl 에서 읽는다)
+python repro/eval/pointmaze_goal_overlay.py $DINO_RUNS/pointmaze_mpc $DINO_RUNS/pointmaze_gd
+# 목표 표시가 필요 없는 환경(Wall)은 라벨·3초 멈춤만 -> $DINO_RUNS/<job>/relabeled/
+python repro/eval/reformat_eval_videos.py $DINO_RUNS/wall_mpc $DINO_RUNS/wall_cem30 $DINO_RUNS/wall_gd
+# Rope·Granular 평가 영상에서 팔이 움직이게: 원래 작업과 같은 인자·DINO_WM_* 환경으로 다시 돌린다 (run_plan.sh 가 붙이는 ckpt_base_path 를 직접 준다).
+# 같은 시작·목표의 재실행이지만 FleX 결과가 프로세스마다 비트 단위로 같지는 않아 에피소드별 값이 원래 실행과 다를 수 있다
+CUDA_VISIBLE_DEVICES=<gpu> python repro/eval/deform_arm_video.py $DINO_RUNS/rope_mpc_arm --config-name plan.yaml model_name=train_rope \
+  planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5 ckpt_base_path=$DINO_TRAIN
 ```
 
 - 산출물: planning 은 `$DINO_RUNS/<job>/` 에 `logs.json`(MPC 반복별 `mpc/*`, 마지막 `final_eval/*`), `plan_targets.pkl`(시작·목표, `goal_source=file` 로 재사용 가능), 그림·영상. 학습은 `$DINO_TRAIN/outputs/<job>/` 에 `hydra.yaml`, `checkpoints/model_<epoch>.pth`, `epoch_logs.jsonl`.
