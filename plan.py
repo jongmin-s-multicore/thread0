@@ -165,6 +165,11 @@ class PlanWorkspace:
             goal_overlay = lambda visuals, goal_states: draw_goal_outlines(
                 visuals, goal_states, shapes[: len(goal_states)]
             )
+        elif self.env_name == "point_maze":
+            # [repro] PointMaze renders only the agent; mark the goal position (state_g[:2]) with a
+            # ring of the success radius and inward ticks on saved plots/videos. Observations are unchanged.
+            from env.pointmaze.goal_marker import draw_goal_markers
+            goal_overlay = draw_goal_markers
 
         self.evaluator = PlanEvaluator(
             obs_0=self.obs_0,
