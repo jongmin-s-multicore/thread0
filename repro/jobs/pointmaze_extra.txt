@@ -1,0 +1,19 @@
+
+# PointMaze 추가 실행: 논문과의 차이가 표본 잡음인지, 우리 코드 수정 때문인지 가른다. 형식은 queue/scheduler.py 머리말.
+#   bash repro/queue/start.sh repro/jobs/pointmaze_extra.txt
+# 각 작업 설정은 benchmark.txt 의 pointmaze_mpc / pointmaze_cem30 / pointmaze_gd 와 같고 아래만 다르다.
+
+# --- 원본 코드 경로, seed 99: SDPA 끔(원래 attention), MPC 성공 에피소드 생략 끔(원래 RNG 흐름).
+#     롤아웃·GD 청크는 남긴다: 샘플·에피소드가 서로 독립이라 계산이 같고, 끄면 300 샘플 attention 이 24 GB 를 넘는다
+pointmaze_mpc_orig    plan env:DINO_WM_SDPA=0 env:DINO_WM_SKIP_SOLVED=0 --config-name plan_point_maze.yaml model_name=point_maze planner.max_iter=20
+pointmaze_cem30_orig  plan env:DINO_WM_SDPA=0 env:DINO_WM_SKIP_SOLVED=0 --config-name plan.yaml model_name=point_maze planner=cem goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0
+pointmaze_gd_orig     plan env:DINO_WM_SDPA=0 env:DINO_WM_SKIP_SOLVED=0 --config-name plan.yaml model_name=point_maze planner=gd  goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0
+
+# --- 시드 추가 (지금 설정 그대로). 에피소드 n 의 시작·목표는 RandomState(seed*n+1) 로 정해진다.
+#     1 과 101 은 99 와도, 서로도 에피소드 0 (RandomState(1), 모든 시드 공통) 하나만 겹친다. 1 과 7 은 8개가 겹친다
+pointmaze_mpc_s1      plan --config-name plan_point_maze.yaml model_name=point_maze planner.max_iter=20 seed=1
+pointmaze_mpc_s101    plan --config-name plan_point_maze.yaml model_name=point_maze planner.max_iter=20 seed=101
+pointmaze_cem30_s1    plan --config-name plan.yaml model_name=point_maze planner=cem goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0 seed=1
+pointmaze_cem30_s101  plan --config-name plan.yaml model_name=point_maze planner=cem goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0 seed=101
+pointmaze_gd_s1       plan --config-name plan.yaml model_name=point_maze planner=gd  goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0 seed=1
+pointmaze_gd_s101     plan --config-name plan.yaml model_name=point_maze planner=gd  goal_source=random_state goal_H=5 n_evals=50 objective.alpha=0 seed=101

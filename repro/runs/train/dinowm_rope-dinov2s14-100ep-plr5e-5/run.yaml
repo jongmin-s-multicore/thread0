@@ -1,0 +1,33 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_rope-dinov2s14-100ep-plr5e-5
+kind: train
+stack: dinowm
+job: train_rope_plr5e-5
+date: 2026-10-02
+env: rope
+dataset: '$DATASET_DIR/deformable/rope (1000 궤적 × 20 프레임, 무작위 0.9/0.1 seed 42)'
+model:
+  encoder: 'DINOv2 ViT-S/14 patch tokens, 동결 (hub 85a2460)'
+  predictor: 'ViT depth 6, heads 16, mlp 2048, dropout 0.1'
+  decoder: VQ-VAE decoder (quantize False)
+  num_hist: 1
+  num_pred: 1
+  frameskip: 1
+  img_size: 224
+training:
+  epochs: 100
+  batch_size: 32
+  optimizer: 'predictor·action encoder AdamW, decoder Adam'
+  lr: 'decoder 3e-4, predictor 5e-5, action encoder 5e-4 (predictor 를 바꿨다 — upstream 5e-4)'
+  seed: 0
+  save_every_x_epoch: 10
+command: >-
+  bash repro/queue/run_train.sh train_rope_plr5e-5 <gpu> env=deformable_env
+  env.dataset.object_name=rope env.kwargs.object_name=rope frameskip=1 num_hist=1
+  training.save_every_x_epoch=10 training.predictor_lr=5e-5
+output: >-
+  $DINO_TRAIN/outputs/train_rope_plr5e-5/ (hydra.yaml, checkpoints/model_<epoch>.pth,
+  epoch_logs.jsonl)
+code: >-
+  hanbin5/local a482f6e. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
+  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')

@@ -1,0 +1,38 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_pointmaze-released-at10-mpccem-orig
+kind: eval
+stack: dinowm
+job: pointmaze_mpc_orig
+date: 2026-10-02
+env: point_maze
+model:
+  source: 공개 체크포인트 (OSF checkpoints/outputs.zip)
+  ckpt: $DINO_CKPT/outputs/point_maze/checkpoints/model_latest.pth
+  epoch: 10
+  num_hist: 3
+  frameskip: 5
+planner:
+  name: MPC-CEM (upstream 설정 파일 내장)
+  cem: 'horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps 10'
+  n_taken_actions: goal_H 5 (plan.py 가 덮어쓴다)
+  max_iter: '20 (원본 null = 무제한)'
+  eval_every: 1
+protocol:
+  n_evals: 50
+  goal_source: random_state
+  goal_H: 5
+  objective: '마지막 프레임 latent MSE, alpha 0'
+  seed: 99
+command: >-
+  DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0 bash repro/queue/run_plan.sh pointmaze_mpc_orig <gpu>
+  --config-name plan_point_maze.yaml model_name=point_maze planner.max_iter=20
+runner_env: >-
+  DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0 (run_info.txt; 청크는
+  합산 순서만 바꾼다, LOCAL.md §2)
+code: >-
+  hanbin5/local a482f6e. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
+  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
+output: $DINO_RUNS/pointmaze_mpc_orig/
+results: >-
+  logs.json 의 mpc/success_rate (step k = MPC k회 예산, sticky). step 1 = 오픈루프 CEM (SETTINGS.md §5.3)
+job_env: 'DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0 (jobs/pointmaze_extra.txt)'

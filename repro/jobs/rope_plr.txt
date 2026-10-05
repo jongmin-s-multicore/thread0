@@ -1,0 +1,7 @@
+# Rope 재학습: predictor lr 를 논문 Table 12 값(5e-5)으로 바꾼다. 형식은 queue/scheduler.py 머리말.
+#   bash repro/queue/start.sh repro/jobs/rope_plr.txt
+# 각 작업 설정은 benchmark.txt 의 train_rope / pq_rope / rope_mpc 와 같고 training.predictor_lr 만 다르다
+# (upstream conf/train.yaml 기본값 5e-4). 5e-4 로 학습한 Rope 는 CD 0.933 으로 논문 0.41 에 못 미쳤다 (gaoyuezhou/dino_wm#24 와 같은 결과).
+train_rope_plr5e-5  train env=deformable_env env.dataset.object_name=rope env.kwargs.object_name=rope frameskip=1 num_hist=1 training.save_every_x_epoch=10 training.predictor_lr=5e-5
+pq_rope_plr5e-5     cmd after=train_rope_plr5e-5 python $THREAD0/repro/eval/eval_pred_quality.py $DINO_TRAIN train_rope_plr5e-5 $DINO_WORK/results/pred_quality/rope_plr5e-5.json 5000
+rope_mpc_plr5e-5    plan after=train_rope_plr5e-5 env:CKPT_BASE=$DINO_TRAIN --config-name plan.yaml model_name=train_rope_plr5e-5 planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5

@@ -1,5 +1,5 @@
 """runs/{train,eval}/<run-id>/run.yaml 을 만든다 (설정만, 결과 수치는 넣지 않는다).
-jobs/benchmark.txt 의 인자와 아래 표에서 만들고, 시작한 날짜는 $DINO_RUNS/<job>/run_info.txt 에서 읽는다.
+jobs/ 의 작업 목록(JOB_FILES)과 아래 표에서 만들고, 시작한 날짜는 $DINO_RUNS/<job>/run_info.txt 에서 읽는다.
 usage: source repro/env.sh && python3 repro/make_run_yaml.py
 """
 import os, re
@@ -7,7 +7,12 @@ import os, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXP = HERE  # repro/
 RUNS = os.environ["DINO_RUNS"]
-JOBS = os.path.join(HERE, "jobs", "benchmark.txt")
+# 벤치마크와 그 뒤의 추가 실행 (시드 추가·원본 코드 경로, Rope predictor lr 5e-5 재학습)
+JOB_FILES = ["benchmark.txt", "pointmaze_extra.txt", "rope_plr.txt"]
+# 큐 작업이 아닌 실행: 평가 영상에서 로봇 팔이 움직이게 같은 인자·환경으로 다시 돌린 것 (repro/eval/deform_arm_video.py)
+ARM_RERUNS = {"rope_mpc_arm": "rope_mpc", "granular_mpc_arm": "granular_mpc"}
+ARM_TOOL = "repro/eval/deform_arm_video.py (실행할 때는 커밋 전 main 작업 트리의 파일, 같은 동작으로 main 5180303 에 커밋)"
+LR_DEFAULT = {"decoder": "3e-4", "predictor": "5e-4", "action_encoder": "5e-4"}  # upstream conf/train.yaml
 
 RELEASED = {  # 공개 체크포인트: hydra.yaml 의 값과 model_latest.pth 의 epoch
     "point_maze": dict(rid="dinowm_pointmaze-released", epoch=10, env="point_maze", hist=3, fs=5),
@@ -24,17 +29,28 @@ PLAN_CFG = {  # upstream conf/plan_*.yaml (CEM 설정, goal, alpha)
 
 def parse_jobs():
     jobs = []
-    for line in open(JOBS):
-        line = line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        t = line.split()
-        name, kind, rest = t[0], t[1], t[2:]
-        opts = {k: v for k, v in (x.split("=", 1) for x in rest if re.match(r"^(gpu|need|after)=", x))}
-        env = dict(x[4:].split("=", 1) for x in rest if x.startswith("env:"))
-        args = [x for x in rest if not re.match(r"^(gpu|need|after)=", x) and not x.startswith("env:")]
-        jobs.append(dict(name=name, kind=kind, opts=opts, env=env, args=args))
+    for fname in JOB_FILES:
+        for line in open(os.path.join(HERE, "jobs", fname)):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            t = line.split()
+            name, kind, rest = t[0], t[1], t[2:]
+            opts = {k: v for k, v in (x.split("=", 1) for x in rest if re.match(r"^(gpu|need|after)=", x))}
+            env = dict(x[4:].split("=", 1) for x in rest if x.startswith("env:"))
+            args = [x for x in rest if not re.match(r"^(gpu|need|after)=", x) and not x.startswith("env:")]
+            jobs.append(dict(name=name, kind=kind, opts=opts, env=env, args=args, src=fname))
+    by_name = {j["name"]: j for j in jobs}
+    for name, orig in ARM_RERUNS.items():
+        if os.path.exists(os.path.join(RUNS, name, "run_info.txt")):
+            jobs.append({**by_name[orig], "name": name, "arm": True})
     return jobs
+
+
+def trained(mname):
+    """직접 학습한 모델의 job 이름 train_<obj>[_<tag>] -> (obj, run-id 앞부분, tag)."""
+    obj, _, tag = mname[len("train_"):].partition("_")
+    return obj, f"dinowm_{obj}-dinov2s14-100ep" + (f"-{tag}" if tag else ""), tag
 
 
 def status(job):
@@ -141,13 +157,18 @@ for j in parse_jobs():
     name, kind, args = j["name"], j["kind"], j["args"]
     common = dict(stack="dinowm", job=name)
     if kind == "train":
-        obj = hydra_args(args)["env.dataset.object_name"]
-        rid = f"dinowm_{obj}-dinov2s14-100ep"
+        h = hydra_args(args)
+        obj, rid, _ = trained(name)
+        assert obj == h["env.dataset.object_name"], name
+        lr = {k: h.get(f"training.{k}_lr", v) for k, v in LR_DEFAULT.items()}
+        changed = [k for k in lr if lr[k] != LR_DEFAULT[k]]
+        lr_text = f"decoder {lr['decoder']}, predictor {lr['predictor']}, action encoder {lr['action_encoder']} " + (
+            "(upstream 기본값)" if not changed else "(" + ", ".join(f"{k} 를 바꿨다 — upstream {LR_DEFAULT[k]}" for k in changed) + ")")
         d = dict(id=rid, kind="train", **common, env=obj, dataset=f"$DATASET_DIR/deformable/{obj} (1000 궤적 × 20 프레임, 무작위 0.9/0.1 seed 42)",
                  model=dict(encoder="DINOv2 ViT-S/14 patch tokens, 동결 (hub 85a2460)", predictor="ViT depth 6, heads 16, mlp 2048, dropout 0.1",
                             decoder="VQ-VAE decoder (quantize False)", num_hist=1, num_pred=1, frameskip=1, img_size=224),
                  training=dict(epochs=100, batch_size=32, optimizer="predictor·action encoder AdamW, decoder Adam",
-                               lr="decoder 3e-4, predictor 5e-4, action encoder 5e-4 (upstream 기본값)", seed=0, save_every_x_epoch=10),
+                               lr=lr_text, seed=0, save_every_x_epoch=10),
                  command=f"bash repro/queue/run_train.sh {name} <gpu> " + " ".join(args),
                  output=f"$DINO_TRAIN/outputs/{name}/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)", code=code_of(name))
         path = os.path.join(EXP, "runs", "train", rid, "run.yaml")
@@ -162,8 +183,8 @@ for j in parse_jobs():
             model = dict(source="공개 체크포인트 (OSF checkpoints/outputs.zip)", ckpt=f"$DINO_CKPT/outputs/{mname}/checkpoints/model_latest.pth",
                          epoch=epoch, num_hist=r["hist"], frameskip=r["fs"])
         else:
-            obj = mname.replace("train_", "")
-            base, env_name, epoch = f"dinowm_{obj}-dinov2s14-100ep", obj, 100
+            obj, base, _ = trained(mname)
+            env_name, epoch = obj, 100
             model = dict(source=f"직접 학습 runs/train/{base}", ckpt=f"$DINO_TRAIN/outputs/{mname}/checkpoints/model_latest.pth", epoch=epoch,
                          num_hist=1, frameskip=1)
         envshort = {"point_maze": "pointmaze", "pusht": "pusht", "wall": "wall"}.get(env_name, env_name)
@@ -172,13 +193,15 @@ for j in parse_jobs():
             variant = "mpccem"
             planner = dict(name="MPC-CEM (upstream 설정 파일 내장)", cem=f"horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps {p['opt_steps']}",
                            n_taken_actions="goal_H 5 (plan.py 가 덮어쓴다)", max_iter=f"{h['planner.max_iter']} (원본 null = 무제한)", eval_every=1)
-            protocol = dict(n_evals=50, goal_source=p["goal_source"], goal_H=5, objective=f"마지막 프레임 latent MSE, alpha {p['alpha']}", seed=99)
+            protocol = dict(n_evals=50, goal_source=p["goal_source"], goal_H=5, objective=f"마지막 프레임 latent MSE, alpha {p['alpha']}",
+                            seed=int(h.get("seed", 99)))
             read = "logs.json 의 mpc/success_rate (step k = MPC k회 예산, sticky). step 1 = 오픈루프 CEM (SETTINGS.md §5.3)"
         else:
             pl = h["planner"]
             n = int(h.get("n_evals", 10))
             protocol = dict(n_evals=n, goal_source=h["goal_source"], goal_H=int(h["goal_H"]),
-                            objective=f"마지막 프레임 latent MSE, alpha {h.get('objective.alpha', '1 (plan.yaml 기본값)')}", seed=99)
+                            objective=f"마지막 프레임 latent MSE, alpha {h.get('objective.alpha', '1 (plan.yaml 기본값)')}",
+                            seed=int(h.get("seed", 99)))
             if pl == "gd":
                 variant = "gd"
                 planner = dict(name="오픈루프 GD (conf/planner/gd.yaml)", gd="horizon = goal_H 5, SGD lr 1, 1000 steps, action_noise 0.003, randn 초기화",
@@ -195,12 +218,26 @@ for j in parse_jobs():
                                n_taken_actions="goal_H 5", max_iter=f"{h['planner.max_iter']} (원본 null = 무제한; deformable 은 success 가 항상 False)",
                                eval_every=f"{h['planner.sub_planner.eval_every']} (내부 CEM 시뮬 평가는 첫 opt step 뒤 한 번만)")
                 read = "logs.json 의 mpc/mean_chamfer_distance (반복별), final_eval/mean_chamfer_distance"
-        rid = f"{base}-at{epoch}-{variant}"
+        # 같은 설정의 변형 실행: job 이름의 꼬리 (pointmaze_mpc_s1 -> s1, _orig, 팔 영상 재실행 -> armvideo)
+        parts = name.split("_", 2)
+        jtag = parts[2] if len(parts) > 2 and parts[2] != trained(mname)[2] else ""
+        jtag = "armvideo" if j.get("arm") else jtag
+        rid = f"{base}-at{epoch}-{variant}" + (f"-{jtag}" if jtag else "")
+        envs = " ".join(f"{k}={v}" for k, v in j["env"].items() if k != "CKPT_BASE")
+        prefix = ("CKPT_BASE=$DINO_TRAIN " if "CKPT_BASE" in j["env"] else "") + (f"{envs} " if envs else "")
+        if j.get("arm"):
+            # run_plan.sh 가 붙이는 ckpt_base_path 를 직접 준다. DINO_WM_* 는 runner_env 와 같게 export 한다
+            command = (f"{envs} " if envs else "") + (f"python repro/eval/deform_arm_video.py $DINO_RUNS/{name} " + " ".join(args)
+                       + (" ckpt_base_path=$DINO_TRAIN" if "CKPT_BASE" in j["env"] else ""))
+            read = read + ". arm_video/{plan<i>,output_final}_<idx>_<tag>.mp4 = 팔이 움직이는 평가 영상, diag_actions.pkl = 실행한 행동"
+            code = code_of(name) + f". 도구: {ARM_TOOL}"
+        else:
+            command = prefix + f"bash repro/queue/run_plan.sh {name} <gpu> " + " ".join(args)
+            code = code_of(name)
         d = dict(id=rid, kind="eval", **common, env=env_name, model=model, planner=planner, protocol=protocol,
-                 command=("CKPT_BASE=$DINO_TRAIN " if j["env"] else "") + f"bash repro/queue/run_plan.sh {name} <gpu> " + " ".join(args),
-                 runner_env=runner_env_of(name), code=code_of(name), output=f"$DINO_RUNS/{name}/", results=read)
+                 command=command, runner_env=runner_env_of(name), code=code, output=f"$DINO_RUNS/{name}/", results=read)
         if j["env"]:
-            d["job_env"] = " ".join(f"{k}={v}" for k, v in j["env"].items()) + " (jobs/benchmark.txt)"
+            d["job_env"] = " ".join(f"{k}={v}" for k, v in j["env"].items()) + f" (jobs/{j['src']})"
         path = os.path.join(EXP, "runs", "eval", rid, "run.yaml")
     else:  # cmd: prediction quality
         m = re.search(r"eval_pred_quality\.py (\S+) (\S+) (\S+) (\d+)", " ".join(args))
@@ -209,8 +246,8 @@ for j in parse_jobs():
             r = RELEASED[mname]
             base, epoch, env_name = r["rid"], r["epoch"], r["env"]
         else:
-            obj = mname.replace("train_", "")
-            base, epoch, env_name = f"dinowm_{obj}-dinov2s14-100ep", 100, obj
+            obj, base, _ = trained(mname)
+            epoch, env_name = 100, obj
         rid = f"{base}-at{epoch}-predq"
         d = dict(id=rid, kind="eval", **common, env=env_name,
                  model=dict(ckpt=f"{ckroot}/outputs/{mname}/checkpoints/model_latest.pth", epoch=epoch),
