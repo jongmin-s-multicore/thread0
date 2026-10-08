@@ -6,7 +6,8 @@ ood_test 는 첫 프레임 물 색 픽셀 수(W0)로 낮음(<4000) / 높음으�
   M1  한 스텝: 문맥 num_hist 프레임으로 다음 프레임 예측 (eval_pred_quality.py 와 같은 계산: LPIPS(VGG)·SSIM·MSE, 224, [-1, 1]).
       기준선 copy_last(마지막 문맥 프레임), recon_copy(그 프레임을 인코더·디코더에 통과), recon_ceiling(정답 프레임을 인코더·디코더에 통과)
   M2  열린 루프 롤아웃: ACWM-Phys eval.py 와 같은 37프레임 창, 시작 10곳. 프레임 t0 + frameskip·k 의 k = num_hist.. 를 예측.
-      같은 지표 + 잠재(DINOv2 패치 임베딩) MSE·코사인 + ACWM 방식 지표(240×240, [0, 1], MSE·M-MSE·PSNR·SSIM)와 정적 기준선
+      같은 지표 + 잠재(DINOv2 패치 임베딩) MSE·코사인 + ACWM 방식 지표(240×240, [0, 1], MSE·M-MSE·PSNR·SSIM)와 정적 기준선.
+      표는 창의 프레임 3 이상(max(num_hist, 3))에서만 모아 num_hist 가 다른 모델을 같은 프레임으로 비교하고, 곡선(m2_curve)은 예측 프레임 전부.
   M3  전체 에피소드 롤아웃 (처음 num_hist 프레임 + 모든 action): 스텝별 곡선, 끝 구간 상자 바닥 물 양
   M5  action 민감도: 같은 창을 다른 에피소드의 action / action 0 으로 롤아웃
 
@@ -39,6 +40,7 @@ CUTS = np.linspace(0, 300 - 37, 10, dtype=int)  # ACWM-Phys eval.py: 37-frame wi
 W0_SPLIT = 4000  # ood_test first-frame water pixels (360x360): low 1675-2795, high 5360-8366
 BAND = (140, 225, 310, 300)  # destination box floor band x0, y0, x1, y1 in 360x360 px
 FILL_FROM = 250  # frames from this index on are used for the final fill level
+COMMON_FROM = 3  # window frame index from which models with different num_hist are compared (a window has 8 frames at stride 5)
 THIRDS = {"all": None, "early": (0, 80), "mid": (80, 200), "late": (200, 300)}  # by window start t0
 
 
@@ -192,6 +194,7 @@ def main():
     H, f, P = cfg.num_hist, cfg.frameskip, cfg.num_pred
     K = 36 // f + 1  # frames of a 37-frame window at stride f
     S = K - H  # predicted frames per window
+    s0 = max(H, COMMON_FROM) - H  # steps skipped in the aggregated tables so every model is scored on frames >= COMMON_FROM (curves keep all steps)
     K_full = 300 // f
     seed(cfg.training.seed)
     ds_cfg = cfg.env.dataset
@@ -222,6 +225,7 @@ def main():
     print(f"time mean built from {nt} training episodes in {time.time() - t0:.0f}s", flush=True)
 
     result = {"model": args.model_name, "ckpt_epoch": epoch, "num_hist": H, "frameskip": f, "window_frames": K, "predicted_per_window": S,
+              "aggregated_from_window_frame": max(H, COMMON_FROM), "curve_first_window_frame": H,
               "cuts": CUTS.tolist(), "sets": {}}
     zero_act = (-train_base.action_mean / train_base.action_std).repeat(f)  # "no motion" in normalized units, one macro action
     for name, Sset in sets.items():
@@ -298,9 +302,9 @@ def main():
             for w_i, t0_ in enumerate(CUTS):
                 fid = t0_ + f * np.arange(K)
                 gt_win = ep.vis240[fid]
-                gt = gt_win[H:]
+                gt = gt_win[H + s0 :]
                 up = lambda p: F.interpolate((p.clamp(-1, 1) + 1) / 2, size=240, mode="bilinear", align_corners=False).permute(0, 2, 3, 1).cpu().numpy()
-                preds = {"model": up(pred[w_i, H:]), "copy_first": np.repeat(gt_win[:1], S, 0), "copy_last": np.repeat(gt_win[H - 1 : H], S, 0), "time_mean": time_mean[fid[H:]]}
+                preds = {"model": up(pred[w_i, H + s0 :]), "copy_first": np.repeat(gt_win[:1], S - s0, 0), "copy_last": np.repeat(gt_win[H - 1 : H], S - s0, 0), "time_mean": time_mean[fid[H + s0 :]]}
                 for m, p in preds.items():
                     for k, v in acwm_metrics(p, gt, gt_win[0], gt_win).items():
                         AC[m][k][e, w_i] = v
@@ -331,19 +335,19 @@ def main():
         for g, members in groups.items():
             res["m2"][g], res["m5"][g], res["m2_latent"][g] = {}, {}, {}
             for t, ws in wsel.items():
-                res["m2"][g][t] = {m: {k: boot(A[m][k][members][:, ws].mean((1, 2))) for k in A[m]} for m in methods}
-                res["m5"][g][t] = {"true": {k: boot(A["model"][k][members][:, ws].mean((1, 2))) for k in A["model"]}}
+                res["m2"][g][t] = {m: {k: boot(A[m][k][members][:, ws][:, :, s0:].mean((1, 2))) for k in A[m]} for m in methods}
+                res["m5"][g][t] = {"true": {k: boot(A["model"][k][members][:, ws][:, :, s0:].mean((1, 2))) for k in A["model"]}}
                 for m in A5:
-                    res["m5"][g][t][m] = {k: boot(A5[m][k][members][:, ws].mean((1, 2))) for k in A5[m]}
-                res["m2_latent"][g][t] = {m: {k: boot(LZ[m][k][members][:, ws].mean((1, 2))) for k in LZ[m]} for m in LZ}
+                    res["m5"][g][t][m] = {k: boot(A5[m][k][members][:, ws][:, :, s0:].mean((1, 2))) for k in A5[m]}
+                res["m2_latent"][g][t] = {m: {k: boot(LZ[m][k][members][:, ws][:, :, s0:].mean((1, 2))) for k in LZ[m]} for m in LZ}
             res["m2_curve"][g] = {m: {k: A[m][k][members].mean((0, 1)).tolist() for k in A[m]} for m in methods}
             res["acwm"][g] = {m: {k: boot(AC[m][k][members].mean(1)) for k in AC[m]} for m in AC}
             res["acwm"][g]["ratio_to_copy_first"] = {m: {k: boot_ratio(AC[m][k][members].mean(1), AC["copy_first"][k][members].mean(1)) for k in ("mse", "masked_mse")} for m in ("model", "copy_last", "time_mean")}
             # skill: how much of the gap between recon_copy and the recon ceiling the model closes (LPIPS, MSE)
             res["m2"][g]["skill_vs_recon_copy"] = {}
             for k in ("lpips", "mse"):
-                num = (A["recon_copy"][k][members].mean((1, 2)) - A["model"][k][members].mean((1, 2)))
-                den = (A["recon_copy"][k][members].mean((1, 2)) - A["recon_ceiling"][k][members].mean((1, 2)))
+                num = (A["recon_copy"][k][members][:, :, s0:].mean((1, 2)) - A["model"][k][members][:, :, s0:].mean((1, 2)))
+                den = (A["recon_copy"][k][members][:, :, s0:].mean((1, 2)) - A["recon_ceiling"][k][members][:, :, s0:].mean((1, 2)))
                 res["m2"][g]["skill_vs_recon_copy"][k] = boot_ratio(num, den)
             if not args.no_full:
                 res["m3_curve"][g] = {m: {k: FC[m][k][members].mean(0).tolist() for k in FC[m]} for m in FC}
