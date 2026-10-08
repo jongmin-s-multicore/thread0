@@ -1,0 +1,9 @@
+# ACWM-Phys Pour Water 본 학습 (파일럿 repro/jobs/pour_water_pilot.txt 뒤). 형식은 queue/scheduler.py 머리말.
+#   bash repro/queue/start.sh repro/jobs/pour_water.txt
+# 공통: frameskip 5, predictor lr 5e-5 (논문 Table 12), 6 epoch, 배치 24 (논문의 32 는 num_hist 3 에서 24 GB GPU 가 OOM).
+#   A (h3f5): num_hist 3, DINO-WM 기본.  B (h1f5): num_hist 1, 논문 Rope·Granular 설정이고 ACWM-DiT 가 첫 프레임 하나로 예측하는 조건과 같다.
+# 평가(eval_pour_water.py): 마지막 epoch 체크포인트의 한 스텝·열린 루프 롤아웃·전체 에피소드·action 민감도, 기준선 포함.
+train_pw_h3f5  train env=acwm_pour_water frameskip=5 num_hist=3 training.epochs=6 training.save_every_x_epoch=1 training.predictor_lr=5e-5 training.batch_size=24
+train_pw_h1f5  train env=acwm_pour_water frameskip=5 num_hist=1 training.epochs=6 training.save_every_x_epoch=1 training.predictor_lr=5e-5 training.batch_size=24
+pq_pw_h3f5     cmd after=train_pw_h3f5 python $THREAD0/repro/eval/eval_pour_water.py $DINO_TRAIN train_pw_h3f5 $DINO_WORK/results/pour_water/h3f5_ep6.json --epoch 6
+pq_pw_h1f5     cmd after=train_pw_h1f5 python $THREAD0/repro/eval/eval_pour_water.py $DINO_TRAIN train_pw_h1f5 $DINO_WORK/results/pour_water/h1f5_ep6.json --epoch 6
