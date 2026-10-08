@@ -29,8 +29,10 @@ repro/
 │   ├── run_train.sh run_cmd.sh   train.py / 임의 명령 실행
 │   └── kill_job.sh wait_event.sh   작업 끄기 (PID 기준), 다음 이벤트까지 기다리며 요약 보기
 ├── jobs/benchmark.txt         벤치마크 작업 목록 (job 이름, 종류, 선행 작업, hydra 인자. GPU·메모리 조건은 머신별 overlay)
+├── jobs/pour_water_pilot.txt  ACWM-Phys Pour Water 파일럿 (SETTINGS.md §7)
 ├── eval/
 │   ├── eval_pred_quality.py   검증 분할 전체의 1-step 예측 LPIPS·SSIM
+│   ├── eval_pour_water.py     ACWM-Phys Pour Water 예측 품질: 한 스텝·열린 루프 롤아웃·전체 에피소드·action 민감도, 기준선 (SETTINGS.md §7.3)
 │   ├── pusht_goal_overlay.py  예전 PushT 평가 영상을 지금 형식으로 (2배 확대): 목표 칸 이미지에서 맞춘 목표 블록 윤곽, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── pointmaze_goal_overlay.py  예전 PointMaze 평가 영상을 지금 형식으로 (2배 확대): 목표 위치(plan_targets.pkl 의 state_g) 원, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── reformat_eval_videos.py    예전 평가 영상을 지금 형식으로, 목표 표시 없이 (Wall 등): Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤

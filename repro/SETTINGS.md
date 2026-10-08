@@ -148,3 +148,37 @@ GPU 환경에 맞춘 메모리·속도 수정(예: 24 GB GPU 용 attention·청�
 | `models/dino.py`: DINOv2 hub 코드를 `facebookresearch/dinov2:85a2460` 으로 고정 | 현재 main 은 Python 3.10 문법 (issue #25) | 가중치(`dinov2_vits14_pretrain.pth`)는 같다. 고정 커밋과 이전에 쓴 hub 캐시(같은 커밋)의 patch 특징 차이 0 |
 
 시뮬레이터 대조 (`repro/setup/check_env.sh`): PointMaze 는 데이터셋 프레임·상태와 완전히 같다. PushT 는 상태가 같고 픽셀 MAE 0.3/255. Wall 은 프레임이 같고, 데이터셋의 상태 배열은 env 상태와 1스텝부터 다르다(기록 방식 차이로 보인다. 성공 판정은 env 상태끼리 비교하므로 영향 없다). Granular 는 3스텝까지 완전히 같다. Rope 는 2스텝까지 입자 위치 오차 3e-4, 3–4스텝에서 평균 0.013–0.019 (이동량 약 1.0 대비, 재실행해도 같은 값).
+
+## 7. 추가 실험: ACWM-Phys Pour Water (논문 밖)
+
+DINO-WM 논문의 벤치마크가 아니다. 물리 영상과 action 이 같이 있는 공개 데이터 [ACWM-Phys](https://arxiv.org/abs/2605.08567) (HF `t1an/ACWM-Phys`, 커밋 `4017e5f`)의 Pour Water 로 DINO-WM 의 예측 품질을 잰다. 시뮬레이터가 공개되지 않아 planning 은 돌릴 수 없다 (목표·보상·상태도 없다). 결과는 이 문서가 아니라 이슈로 올린다 (AGENTS.md §1).
+
+### 7.1 데이터
+
+- 컵을 기울여 옆 상자에 물을 붓는 PyFleX 장면. 에피소드마다 300프레임(360×360, 10 fps)과 action [300, 4]. action 차원 0·2 는 모든 에피소드에서 0 이라 빼고 2차원으로 쓴다. `metadata.pt` 는 pickle 이라 `torch.load(..., weights_only=True)` 로만 읽는다.
+- 쓰는 split: `ind_train` 1000개에서 `episode_60`–`episode_79` 20개를 뺀 980개 (train/val 90/10, seed 42 = 882/98), `ind_test` 50, `ood_test` 50. 뺀 20개는 첫 프레임에서 물이 컵 바닥에 얇게 있고 입자가 흩어져 있으며(최대 물덩어리가 물 픽셀의 0.25–0.89, 나머지 980개는 0.94 이상) 끝 프레임에 상자 바닥 물이 거의 없다(0–71 px, 나머지 중앙값 4,944). 붓는 장면이 없다. 해시·디코딩·길이는 정상이라 파일 검사로는 안 잡히고 영상을 봐야 한다. 제외 목록은 `conf/env/acwm_pour_water.yaml`.
+- `ood_test` 는 물 양이 다르다. 첫 프레임의 물 색 픽셀 수(W0, 360×360, HSV hue 98–110·S>70·V>100)가 정상 학습 980개는 2,351–6,202 인데 `ood_test` 는 낮음 26개 1,675–2,795, 높음 24개 5,360–8,366 으로 갈려 있다 (평가는 W0 4,000 으로 나눈다).
+- 정렬: a[t] 가 프레임 t→t+1 전이를 만든다 (DINO-WM 슬라이서 규약과 같다). 주황색 팔 중심 속도를 a[t+j] (j=−4..+4)에 회귀하면 j=0 의 주 계수가 0.43–0.88 이고 j=±1..3 은 모두 0.07 이하다 (에피소드 160개). 팔만 본 것이고 물은 확인하지 않았다.
+- 로더 `datasets/acwm_pour_water_dset.py`, 설정 `conf/env/acwm_pour_water.yaml` (`env=acwm_pour_water`). 슬라이스가 쓰는 프레임만 decord 로 디코딩한다 (`DeformDataset`·`TrajSlicerDataset` 는 샘플마다 궤적 전체를 읽는다). action 은 분할 전 980개 통계로 z-score, proprio·state 는 Rope 처럼 더미.
+
+### 7.2 학습
+
+| 항목 | 값 |
+|---|---|
+| 모델·옵티마이저 | §2 와 같다 (DINOv2 ViT-S/14 동결, ViT predictor, VQ-VAE 디코더), predictor lr 5e-5 · decoder 3e-4 · action encoder 5e-4 (논문 Table 12) |
+| 입력·frameskip | 224, frameskip 5 (300프레임 → 60 스텝) |
+| 모델 A / B | num_hist 3 (DINO-WM 기본) / num_hist 1 (논문 Rope·Granular 설정, ACWM-DiT 가 첫 프레임 하나로 예측하는 조건과 같다) |
+| epoch | 6 (epoch = 슬라이스 전부 한 번: A 247,842개, B 256,662개) |
+| 배치 | 논문 32. num_hist 3 은 24 GB GPU 에서 OOM 이라 그런 환경 브랜치는 낮춘다 (예: `hanbin5/local` 24) |
+| 작업 | `repro/jobs/pour_water_pilot.txt` (에피소드 60개·3 epoch 파일럿). 본 학습 목록은 배치를 정한 환경 브랜치에 있다 |
+
+### 7.3 평가 (`repro/eval/eval_pour_water.py`)
+
+세트는 검증 98개, `ind_test`, `ood_test` (낮음·높음). 지표마다 에피소드 단위 bootstrap 95 % 구간. 기준선은 모델 없이 계산한다: copy_last(마지막 문맥 프레임), recon_copy(그 프레임을 인코더·디코더에 통과), recon_ceiling(정답 프레임을 인코더·디코더에 통과), copy_first(창의 첫 프레임), time_mean(학습 100개의 시각별 평균 영상). 디코더 오차를 모델 오차와 분리하려고 recon 두 개를 둔다 (Rope·Granular 는 recon LPIPS 가 예측 LPIPS 의 91·96 % 였다).
+
+- **한 스텝**: `eval_pred_quality.py` 와 같은 계산 (LPIPS-VGG, SSIM, MSE, 224, [−1, 1]). 잠재 MSE 와 copy-latent 기준선도.
+- **열린 루프 롤아웃**: ACWM-Phys `eval.py` 와 같은 37프레임 창, 시작 `linspace(0, 263, 10)`. 프레임 간격 frameskip 로 창의 프레임 k=num_hist.. 를 예측. 같은 지표, 잠재 MSE·코사인, ACWM 방식 지표(240×240, [0, 1], MSE·M-MSE·PSNR·skimage SSIM, `compute_metrics` 와 같은 식)를 구한다. 표는 창의 프레임 3 이상에서만 모아 num_hist 가 다른 모델을 같은 프레임으로 비교한다. 창 시작 시각(<80 / 80–200 / ≥200)으로도 나눈다.
+- **전체 에피소드**: 처음 num_hist 프레임과 모든 action 으로 60 스텝을 굴린 오차 곡선, 끝 구간(프레임 250 이상) 상자 바닥(360px 기준 x 140–310, y 225–300)의 물 색 픽셀 수를 정답과 비교. 정답을 재구성한 영상에서 같은 양의 상대 오차가 10 % 를 넘으면 신뢰하지 않는다.
+- **action 민감도**: 같은 창을 다음 에피소드의 action / 움직임 없음 action 으로 롤아웃해 악화를 본다. 처음 약 80 스텝은 에피소드 간 action 이 거의 같아 뒤 구간을 따로 본다.
+
+SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])가 정의가 달라 섞지 않는다. ACWM-DiT 논문 수치와는 프레임 부분집합(frameskip 5), 해상도, 모델이 달라 직접 비교하지 않고 같은 코드로 계산한 기준선 대비 비율로 본다. 평가 스크립트는 파일럿 체크포인트로만 돌려 봤고(롤아웃 첫 예측이 `train.py` 의 forward 와 잠재 6e-5 이내로 같다), 본 학습 결과는 이 문서 작성 시점에 없다.
