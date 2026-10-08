@@ -206,9 +206,12 @@ class VWorldModel(nn.Module):
         if self.predictor is not None:
             z_pred = self.predict(z_src)
             if self.decoder is not None:
-                obs_pred, diff_pred = self.decode(
-                    z_pred.detach()
-                )  # recon loss should only affect decoder
+                # [repro] decoder_loss_pred only feeds logs and plots (it is not part of `loss`), so decode without
+                # an autograd graph: same loss and gradients, less memory (OOM on 24GB at num_hist 3, batch 32)
+                with torch.no_grad():
+                    obs_pred, diff_pred = self.decode(
+                        z_pred.detach()
+                    )  # recon loss should only affect decoder
                 visual_pred = obs_pred['visual']
                 recon_loss_pred = self.decoder_criterion(visual_pred, visual_tgt)
                 decoder_loss_pred = (

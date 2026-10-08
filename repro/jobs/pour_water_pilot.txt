@@ -1,5 +1,5 @@
 # ACWM-Phys Pour Water 파일럿: 학습 에피소드 60개(학습 54 / 검증 6)로 3 epoch. 형식은 queue/scheduler.py 머리말.
 #   bash repro/queue/start.sh repro/jobs/pour_water_pilot.txt
-# 본 학습(repro/jobs/pour_water.txt)과 설정이 같고 데이터만 줄였다. 한 epoch 이 약 475 iteration 이라
+# 본 학습(repro/jobs/pour_water.txt)과 설정이 같고 데이터만 줄였다. 배치는 24: 논문의 32 는 num_hist 3 에서 24 GB GPU 가 OOM (24 에서 최대 약 19.8 GB). 한 epoch 이 633 iteration 이라
 # iteration 당 시간·GPU 메모리를 재고, 검증 잠재 손실(z_visual_loss)이 내려가는지, 정렬·정규화에 문제가 없는지 본다.
-train_pw_pilot  train env=acwm_pour_water env.dataset.n_rollout=60 frameskip=5 num_hist=3 training.epochs=3 training.save_every_x_epoch=1 training.predictor_lr=5e-5
+train_pw_pilot  train env=acwm_pour_water env.dataset.n_rollout=60 frameskip=5 num_hist=3 training.epochs=3 training.save_every_x_epoch=1 training.predictor_lr=5e-5 training.batch_size=24
