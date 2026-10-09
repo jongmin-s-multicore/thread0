@@ -87,5 +87,6 @@
 - 태그 설명의 "나누기 전에 시작한 작업은 이 커밋에서 돌았다" 는 `wall_cem30` 에만 맞다. 이 표가 정확하다.
 - `train_rope` 는 planning 쪽 수정(`cem.py`·`mpc.py`·`evaluator.py`)이 들어가기 전에 시작했지만 학습은 그 파일을 쓰지 않는다.
 - OOM 이나 코드 수정으로 중간에 멈춘 시도는 결과에 쓰지 않는다.
+- Pour Water 실험(`jobs/pour_water*.txt`, 로더, 평가, 위 두 행)은 브랜치 `hanbin5/water` 에 있다. 실행 당시 이 커밋들의 브랜치 이름은 `hanbin5/local` 이었다 (`run_info.txt` 의 `branch=`). 이 문서의 Pour Water 항목은 그 브랜치의 것이다.
 - Pour Water 의 물 양 분석·그림·정성 비교(`eval_pour_water_volume.py`, `plot_pour_water.py`, `render_pour_water.py`)는 큐 밖에서 main `36834f5` 와 같은 내용의 파일(그때는 커밋 전 main 작업 트리)로 돌렸다. `eval_pour_water.py` 의 "action 0" 변형은 `36834f5` 에서 같은 값(정규화한 0)을 명시적으로 쓰도록 바꿨고 동작은 같다.
 - `repro/eval/eval_pred_quality.py` 는 공개 전 검토에서 부분 표본이 실행마다 달라지는 것을 찾아 `seed(training.seed)` 를 넣었다 (예측 품질 작업은 그 뒤에 시작한다).

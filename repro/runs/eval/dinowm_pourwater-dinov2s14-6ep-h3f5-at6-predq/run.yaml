@@ -27,8 +27,9 @@ command: >-
   $DINO_TRAIN train_pw_h3f5 $DINO_WORK/results/pour_water/h3f5_ep6.json --epoch 6
 runner_env: 'DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 (run_info.txt; 청크는 합산 순서만 바꾼다, LOCAL.md §2)'
 code: >-
-  hanbin5/local 0a75239. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
-  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
+  hanbin5/water 0a75239 (run_info.txt 의 branch=hanbin5/local 은 옮기기 전 이름). 코드: upstream
+  gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git diff 0a9492f -- . ':!repro' ':!*.md'
+  ':!.gitignore')
 output: $DINO_WORK/results/pour_water/h3f5_ep6.json
 results: >-
   output json 의 sets.<val|ind_test|ood_test>.{m1, m2, m2_curve, m2_latent, acwm, m5, m3_curve,

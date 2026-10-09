@@ -135,6 +135,8 @@ def run_start(job):
 
 def code_of(job):
     m = re.search(r"\bcommit=(\w+)", run_start(job))
+    if m and "_pw_" in job:  # Pour Water: 실행 당시 브랜치 이름은 hanbin5/local 이었고 그 커밋들은 hanbin5/water 로 옮겼다
+        return f"hanbin5/water {m.group(1)} (run_info.txt 의 branch=hanbin5/local 은 옮기기 전 이름). 코드: {CODE}"
     where = f"hanbin5/local {m.group(1)}" if m else PRE_SPLIT.get(job, "hanbin5/local (실행 전)")
     return f"{where}. 코드: {CODE}"
 

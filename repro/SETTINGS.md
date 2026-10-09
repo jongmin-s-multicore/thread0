@@ -169,8 +169,8 @@ DINO-WM 논문의 벤치마크가 아니다. 물리 영상과 action 이 같이 
 | 입력·frameskip | 224, frameskip 5 (300프레임 → 60 스텝) |
 | 모델 A / B | num_hist 3 (DINO-WM 기본) / num_hist 1 (논문 Rope·Granular 설정, ACWM-DiT 가 첫 프레임 하나로 예측하는 조건과 같다) |
 | epoch | 6 (epoch = 슬라이스 전부 한 번: A 247,842개, B 256,662개) |
-| 배치 | 논문 32. num_hist 3 은 24 GB GPU 에서 OOM 이라 그런 환경 브랜치는 낮춘다 (예: `hanbin5/local` 24) |
-| 작업 | `repro/jobs/pour_water_pilot.txt` (에피소드 60개·3 epoch 파일럿). 본 학습 목록은 배치를 정한 환경 브랜치에 있다 |
+| 배치 | 논문 32. num_hist 3 은 24 GB GPU 에서 OOM 이라 24 로 낮췄다 (이 실험의 브랜치 `hanbin5/water`) |
+| 작업 | `repro/jobs/pour_water_pilot.txt` (에피소드 60개·3 epoch 파일럿), `repro/jobs/pour_water.txt` (본 학습 A·B 와 평가). 둘 다 배치 24 |
 
 ### 7.3 평가 (`repro/eval/eval_pour_water.py`)
 
