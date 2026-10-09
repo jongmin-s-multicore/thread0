@@ -50,33 +50,52 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
 
 ### 설치
 
-```bash
-# 0. 사전 준비: NVIDIA 드라이버, git curl unzip zip, libglew-dev libgl1-mesa-dev (mujoco-py 빌드),
-#    Rope·Granular planning 을 하려면 docker + NVIDIA container runtime (sudo 없이 docker 그룹)
-git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0 && cd ~/thread0
-export DINO_WORK=~/dinowm      # 작업 루트 (기본값, 레포 밖). 머신별 값은 .claude/env.local.sh 에 둘 수 있다 (gitignore)
+한 셸(bash 또는 zsh)에서 레포 루트로 차례로 실행한다. 아래 명령 블록에는 일부러 `#` 주석을 넣지 않는다 — zsh 는 `setopt interactivecomments` 가 꺼져 있으면(oh-my-zsh 등이 켜지 않은 기본 상태) 줄 끝 `# ...` 을 명령의 인자로 넘긴다.
 
-# 1. 설치: micromamba env (Python 3.9, environment.yaml 고정 버전) + MuJoCo 2.1.0 + mujoco-py 빌드
-bash repro/setup/install_env.sh --dry-run    # 실행할 명령만 확인
-bash repro/setup/install_env.sh
-bash repro/setup/install_pyflex.sh           # Rope·Granular planning 에만 필요 (도커 빌드, 약 1분)
+0. 사전 준비: NVIDIA 드라이버, `git curl bzip2 unzip zip gcc`, mujoco-py 빌드용 `libglew-dev libgl1-mesa-dev`. `/usr/lib/nvidia` 가 없으면(우분투 드라이버 패키지가 만든다) mujoco-py 가 CPU 렌더러로 빌드되고 `libosmesa6-dev` 도 필요하다. Rope·Granular planning 에는 docker + NVIDIA container runtime (sudo 없이 docker 그룹). 디스크는 `$DINO_WORK` 에 PointMaze·PushT·Wall 약 110 GB, Rope·Granular 약 160 GB 더 (압축을 푸는 동안 15 GB 더) — 홈이 작으면 큰 디스크를 작업 루트로 정한다.
+1. 레포와 작업 루트. 레포 위치는 어디든 된다. `DINO_WORK` 는 레포 밖에 둔다 (기본값 `~/dinowm`). 다른 경로를 쓰면 새 셸마다 다시 export 하거나 `.claude/env.local.sh` (gitignore, 아래 "머신별 설정")에 적는다.
 
-# 2. 데이터와 공개 체크포인트 (OSF). 전부 받으면 zip 21 GB, 풀면 약 236 GB
-bash repro/setup/download_data.sh core checkpoints   # PointMaze·PushT·Wall + 체크포인트만
-bash repro/setup/download_data.sh deformable         # Rope·Granular
+   ```bash
+   git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0
+   cd ~/thread0
+   export DINO_WORK=~/dinowm
+   ```
 
-# 3. 점검 (레포 루트에서, bash 또는 zsh, 새 셸마다 source)
-source repro/env.sh
-bash repro/setup/check_env.sh            # torch/CUDA, mujoco-py, DINOv2, 공개 체크포인트로 렌더·동역학 대조
-bash repro/setup/check_env.sh --pyflex   # + PyFleX, Rope·Granular
+2. 설치: micromamba env (Python 3.9, `environment.yaml` 고정 버전) + MuJoCo 2.1.0 + mujoco-py 빌드. `uv` 가 PATH 에 있으면 uv, 없으면 pip 로 설치한다. `--dry-run` 은 실행할 명령만 출력한다. `install_pyflex.sh` 는 Rope·Granular planning 에만 필요하다 (도커 빌드, 약 1분).
 
-# 4. 공개 체크포인트로 planning 한 번 (PointMaze, 에피소드 2개, 1분 안쪽)
-python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
-  n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
+   ```bash
+   bash repro/setup/install_env.sh --dry-run
+   bash repro/setup/install_env.sh
+   bash repro/setup/install_pyflex.sh
+   ```
 
-# 5. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(루트 README "Branches and changes to upstream")를 쓴다. 큐 설정은 아래 "머신별 설정"
-bash repro/queue/start.sh
-```
+3. 데이터와 공개 체크포인트 (OSF). `core checkpoints` 는 PointMaze·PushT·Wall 과 체크포인트, `deformable` 은 Rope·Granular. 전부 받으면 zip 21 GB, 풀면 약 236 GB. 끊기면 같은 명령을 다시 실행하면 이어 받는다.
+
+   ```bash
+   bash repro/setup/download_data.sh core checkpoints
+   bash repro/setup/download_data.sh deformable
+   ```
+
+4. 점검. `source repro/env.sh` 는 새 셸마다 레포 루트에서 한다. `check_env.sh` 는 torch/CUDA, mujoco-py, DINOv2, 공개 체크포인트로 렌더·동역학 대조. `--pyflex` 는 PyFleX 와 Rope·Granular 까지.
+
+   ```bash
+   source repro/env.sh
+   bash repro/setup/check_env.sh
+   bash repro/setup/check_env.sh --pyflex
+   ```
+
+5. 공개 체크포인트로 planning 한 번 (PointMaze, 에피소드 2개, 1분 안쪽).
+
+   ```bash
+   python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
+     n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
+   ```
+
+6. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(루트 README "Branches and changes to upstream")를 쓴다. 큐 설정은 아래 "머신별 설정".
+
+   ```bash
+   bash repro/queue/start.sh
+   ```
 
 설치 후 디렉터리 (`$DINO_WORK`, 기본 `~/dinowm`):
 
@@ -99,7 +118,7 @@ bash repro/queue/start.sh
 | OS | Ubuntu 24.04, NVIDIA driver 580.178.04 |
 | 소프트웨어 | Python 3.9.19 (conda-forge), torch 2.3.0+cu121, mujoco-py 2.1.2.14 (EGL), gym 0.23.1, hydra-core 1.2.0, PyFleX (CUDA 9.2 도커 빌드) |
 
-`repro/setup/` 스크립트는 위 환경에서 손으로 실행한 명령을 옮긴 것이다. 각 명령은 실행해 봤고(pip 설치는 uv 로), 스크립트를 새 머신에서 처음부터 끝까지 돌려 보지는 않았다.
+`repro/setup/` 스크립트는 위 환경에서 손으로 실행한 명령을 옮긴 것이다. 2026-10-09 에 같은 머신에서 빈 홈 디렉토리와 빈 환경변수(`env -i`), uv 없이(pip) bash 로 위 1–5 를 처음부터 끝까지 돌렸고 모든 단계가 성공했다 (`check_env.sh --pyflex` 포함). 그 실행에서 `core`·`deformable` 다운로드는 기존 데이터를 링크로 대신했고 (`checkpoints` 다운로드는 같은 스크립트로 실제로 받았다), 작업 큐(6)는 띄우지 않았다. `/usr/lib/nvidia` 가 없는 Ubuntu 24.04 컨테이너에서는 mujoco-py 빌드가 `libosmesa6-dev` 없이 실패하고 있으면 성공했다 (CPU 렌더러의 PointMaze 프레임은 데이터셋과 0~255 픽셀 평균 0.03 차이, EGL 은 0.00). 다른 배포판·GPU 는 확인하지 않았다.
 
 ### 설치된 구성
 
@@ -122,13 +141,12 @@ OSF 프로젝트 [bmw48](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf40838
 
 레포 루트에서 실행한다. 셸마다 `source repro/env.sh` 를 먼저 한다 (bash 또는 zsh).
 
-```bash
-# 벤치마크 전체: 작업 큐. 위에서부터 GPU 슬롯이 나는 대로 띄운다 (기본: GPU 당 1개 — 머신별 조건은 아래)
-bash repro/queue/start.sh                   # 로그 $DINO_RUNS/scheduler.log
-bash repro/queue/wait_event.sh 3300 major   # 작업이 끝나거나 실패할 때까지 기다렸다가 요약 출력
-python3 repro/eval/summarize.py             # $DINO_WORK/results/summary.md
-bash repro/queue/kill_job.sh pusht_mpc      # 작업 하나 끄기 (다시 넣으려면 $DINO_RUNS/pusht_mpc 를 옮기고 큐를 다시 띄운다)
-```
+| 명령 | 하는 일 |
+|---|---|
+| `bash repro/queue/start.sh` | 벤치마크 전체를 작업 큐로. 위에서부터 GPU 슬롯이 나는 대로 띄운다 (기본: GPU 당 1개 — 머신별 조건은 아래). 로그 `$DINO_RUNS/scheduler.log` |
+| `bash repro/queue/wait_event.sh 3300 major` | 작업이 끝나거나 실패할 때까지 기다렸다가 요약 출력 |
+| `python3 repro/eval/summarize.py` | `$DINO_WORK/results/summary.md` 로 요약 |
+| `bash repro/queue/kill_job.sh pusht_mpc` | 작업 하나 끄기 (다시 넣으려면 `$DINO_RUNS/pusht_mpc` 를 옮기고 큐를 다시 띄운다) |
 
 작업 하나만 손으로 돌릴 때 (큐가 쓰는 것과 같은 명령, 두 번째 인자가 GPU 번호).
 

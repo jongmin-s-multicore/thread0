@@ -13,6 +13,9 @@ if [ -f "$THREAD0/.claude/env.local.sh" ]; then . "$THREAD0/.claude/env.local.sh
 
 # 작업 루트: 환경, 데이터, 체크포인트, 실행 산출물이 모두 이 아래에 생긴다. 레포 밖에 둔다 (코드는 이 레포)
 export DINO_WORK=${DINO_WORK:-$HOME/dinowm}
+# 따옴표 안의 ~ 는 셸이 펼치지 않는다 (DINO_WORK="~/dinowm"). 그대로 쓰면 setup 스크립트가 레포 안에 '~' 디렉토리를 만든다.
+# 여기서 ~ 를 펼치고, 상대경로는 지금 디렉토리(레포 루트) 기준 절대경로로 바꾼다
+case $DINO_WORK in "~") DINO_WORK=$HOME ;; "~/"*) DINO_WORK=$HOME/${DINO_WORK#"~/"} ;; /*) ;; *) DINO_WORK=$PWD/$DINO_WORK ;; esac
 case "$DINO_WORK/" in "$THREAD0"/*) echo "repro/env.sh: DINO_WORK($DINO_WORK) 를 레포($THREAD0) 밖으로 정한다" >&2 ;; esac
 export DINO_ENV=${DINO_ENV:-$DINO_WORK/envs/dino_wm}           # micromamba env prefix (Python 3.9)
 export DINO_WM=${DINO_WM:-$THREAD0}                            # dino_wm 코드 = 이 레포 루트 (gaoyuezhou/dino_wm fork)
