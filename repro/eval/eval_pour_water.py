@@ -227,7 +227,7 @@ def main():
     result = {"model": args.model_name, "ckpt_epoch": epoch, "num_hist": H, "frameskip": f, "window_frames": K, "predicted_per_window": S,
               "aggregated_from_window_frame": max(H, COMMON_FROM), "curve_first_window_frame": H,
               "cuts": CUTS.tolist(), "sets": {}}
-    zero_act = (-train_base.action_mean / train_base.action_std).repeat(f)  # "no motion" in normalized units, one macro action
+    zero_act = torch.zeros(2 * f)  # one macro action of normalized zeros = the training-mean action (0.09 std from "no motion" in the move dim)
     for name, Sset in sets.items():
         t_set = time.time()
         base, idxs = unwrap(Sset)
