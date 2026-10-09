@@ -33,6 +33,9 @@ repro/
 ├── eval/
 │   ├── eval_pred_quality.py   검증 분할 전체의 1-step 예측 LPIPS·SSIM
 │   ├── eval_pour_water.py     ACWM-Phys Pour Water 예측 품질: 한 스텝·열린 루프 롤아웃·전체 에피소드·action 민감도, 기준선 (SETTINGS.md §7.3)
+│   ├── eval_pour_water_volume.py  Pour Water 물 양 분석: 전체 에피소드 롤아웃의 물 색 픽셀 수(화면 전체·상자 바닥)를 에피소드별로, action 민감도를 창 시작 t0 별로 (npz)
+│   ├── plot_pour_water.py     위 두 결과(JSON, npz)와 epoch_logs 로 그림 5개
+│   ├── render_pour_water.py   정답 / A / B 전체 에피소드 롤아웃의 격자 그림과 나란히 보는 mp4
 │   ├── pusht_goal_overlay.py  예전 PushT 평가 영상을 지금 형식으로 (2배 확대): 목표 칸 이미지에서 맞춘 목표 블록 윤곽, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── pointmaze_goal_overlay.py  예전 PointMaze 평가 영상을 지금 형식으로 (2배 확대): 목표 위치(plan_targets.pkl 의 state_g) 원, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── reformat_eval_videos.py    예전 평가 영상을 지금 형식으로, 목표 표시 없이 (Wall 등): Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
