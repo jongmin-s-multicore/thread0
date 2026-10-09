@@ -122,16 +122,18 @@ Hardware used: two 24 GB GPUs (RTX 3090 Ti + RTX 3090) on Ubuntu 24.04. Setup sc
 
 **Install**
 
+Nothing assumes your home directory. The commands below clone the repo into the current directory; it can live anywhere. `DINO_WORK` is the work root for the env, data, checkpoints and run outputs, and can be any path outside the repo. `~/dinowm` in the third line is only the default: if your home directory is small, replace it with a path on a larger disk (see the disk space above).
+
 ```bash
-git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0
-cd ~/thread0
+git clone https://github.com/jongmin-s-multicore/thread0.git
+cd thread0
 export DINO_WORK=~/dinowm
 bash repro/setup/install_env.sh
 ```
 
-The repo can be cloned anywhere. `DINO_WORK` is the work root for the env, data, checkpoints and run outputs; keep it outside the repo. Every script reads `DINO_WORK` from the environment and falls back to `~/dinowm`. If you choose another path, set it again in every new shell (for example in `~/.bashrc`), or write `export DINO_WORK=${DINO_WORK:-/your/path}` into `.claude/env.local.sh` in the repo (gitignored; `repro/env.sh` reads it first).
+Every script reads `DINO_WORK` from the environment and falls back to `~/dinowm`. If you choose another path, set it again in every new shell (for example in `~/.bashrc`), or write `export DINO_WORK=${DINO_WORK:-/your/path}` into `.claude/env.local.sh` in the repo (gitignored; `repro/env.sh` reads it first).
 
-`install_env.sh` creates a micromamba env (Python 3.9 with the pinned versions of `environment.yaml`), installs MuJoCo 2.1.0 into `~/.mujoco/mujoco210` and builds mujoco-py. It installs the pip packages (about 4 GB of downloads) with uv if `uv` is on `PATH`, otherwise with pip. `bash repro/setup/install_env.sh --dry-run` prints the commands without running them.
+`install_env.sh` creates a micromamba env (Python 3.9 with the pinned versions of `environment.yaml`), installs MuJoCo 2.1.0 into `~/.mujoco/mujoco210` (where mujoco-py looks by default; set `MUJOCO_DIR` to use another path) and builds mujoco-py. It installs the pip packages (about 4 GB of downloads) with uv if `uv` is on `PATH`, otherwise with pip. `bash repro/setup/install_env.sh --dry-run` prints the commands without running them.
 
 For Rope and Granular only, build PyFleX (in docker):
 
