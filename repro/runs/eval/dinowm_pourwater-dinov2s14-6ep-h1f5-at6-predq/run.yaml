@@ -1,0 +1,35 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_pourwater-dinov2s14-6ep-h1f5-at6-predq
+kind: eval
+stack: dinowm
+job: pq_pw_h1f5
+date: 2026-10-08
+env: acwm_pour_water
+model:
+  ckpt: $DINO_TRAIN/outputs/train_pw_h1f5/checkpoints/model_6.pth
+  epoch: 6
+  num_hist: 1
+  frameskip: 5
+protocol:
+  sets: 'val(학습과 같은 분할의 98 에피소드), ind_test 50, ood_test 50 (첫 프레임 물 색 픽셀 수 4000 기준 낮음 26 / 높음 24)'
+  one_step: >-
+    슬라이스 5000개 (균등 간격), LPIPS(VGG)·SSIM·MSE — eval_pred_quality.py 와 같은 계산. 기준선 copy_last, recon_copy,
+    recon_ceiling
+  open_loop: >-
+    ACWM-Phys eval.py 와 같은 37프레임 창, 시작 linspace(0, 263, 10), 프레임 간격 frameskip. 표는 창 프레임 3 이상, 곡선은 예측 프레임
+    전부. 잠재 MSE·코사인, ACWM 방식 지표(240×240, [0, 1])와 정적 기준선
+  whole_episode: >-
+    처음 num_hist 프레임 + 모든 action 으로 60 스텝. 끝 구간(프레임 250 이상) 상자 바닥 물 색 픽셀 수, 재구성으로 신뢰 관문(상대오차 10 % 이하)
+  action_sensitivity: 다음 에피소드의 action / 정규화한 action 0 으로 교체
+  intervals: '에피소드 단위 bootstrap 95 %'
+command: >-
+  bash repro/queue/run_cmd.sh pq_pw_h1f5 <gpu> python $THREAD0/repro/eval/eval_pour_water.py
+  $DINO_TRAIN train_pw_h1f5 $DINO_WORK/results/pour_water/h1f5_ep6.json --epoch 6
+runner_env: 'DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 (run_info.txt; 청크는 합산 순서만 바꾼다, LOCAL.md §2)'
+code: >-
+  hanbin5/local 0a75239. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
+  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
+output: $DINO_WORK/results/pour_water/h1f5_ep6.json
+results: >-
+  output json 의 sets.<val|ind_test|ood_test>.{m1, m2, m2_curve, m2_latent, acwm, m5, m3_curve,
+  m3_fill}

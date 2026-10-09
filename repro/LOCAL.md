@@ -34,6 +34,7 @@
 - planning 작업 하나는 GPU 를 약 6–10 GB, 학습 작업(Rope·Granular, batch 32)은 약 11.5 GB 쓴다.
 - PointMaze 작업은 env 워커 50개의 mujoco-py EGL 컨텍스트로 약 5 GB 를 더 쓴다. 학습과 같은 GPU 에 두면 MPC 는 시작 직후, GD 는 첫 스텝·첫 평가에서 OOM 이었다. GPU 하나에 작업 여러 개를 돌릴 때는 overlay 로 PointMaze 작업에 `need=` 를 크게 준다.
 - 원본 코드로는 MPC 반복이 쌓이면 평가 디코딩(50개 × 프레임 전부)이, 학습에서는 검증 forward 가 OOM 이었다 (2절의 수정으로 해결).
+- Pour Water 학습 (num_hist 3, frameskip 5, 224): 배치 32 는 24 GB 에서 OOM 이다 (디코더 conv 에서, 23.7 GB 점유 뒤). 2절의 `decoder_loss_pred` 수정을 넣고도 같았다. 배치 24 는 최대 19.8 GB (nvidia-smi). num_hist 1 은 배치 24 에서 7.1 GB.
 
 ## 4. 계산 시간 (이 환경에서 측정)
 
@@ -44,6 +45,8 @@
 | CEM opt step 1번 (에피소드 50개, MPC 1회차) | PointMaze 약 371 s, PushT 약 373 s — 24 GB GPU 하나를 두 planning 작업이 나눠 쓸 때 (단독이 아니다), `plan_0_output_<k>.png` 저장 시각 간격 |
 | Rope 학습 1 epoch (535 iteration + 검증) | RTX 3090 Ti 에서 약 5분 (GPU 를 거의 혼자 쓸 때), planning 작업과 GPU 를 나눠 쓸 때 8.5–10.3분 — `rollout_plots/e<k>_rollout` 생성 시각 간격 |
 | FleX 롤아웃 (env 1개, prepare 포함 push 3번) | Rope 18.7 s, Granular 45 s |
+| Pour Water 학습, 배치 24, 6 epoch (epoch = 슬라이스 전부 한 번) | num_hist 3: 0.88 s/it (RTX 3090), epoch 10,327 it + 검증 약 2.7 h, 총 16.1 h. num_hist 1: 0.37 s/it (RTX 3090 Ti), epoch 10,695 it 약 1.2 h, 총 7.0 h. 샘플당 약 37 ms 로 배치와 무관 |
+| Pour Water 평가 (`eval_pour_water.py`, 에피소드 198개) | 약 23–26 분 (num_hist 1 23 분, num_hist 3 26 분) |
 
 ## 5. 실행 기록
 
@@ -61,6 +64,8 @@
 | `dinowm_pointmaze-released-at10-{mpccem,cem30,gd}-{s1,s101}` | `pointmaze_{mpc,cem30,gd}_{s1,s101}` | PointMaze seed 1·101, 나머지는 seed 99 실행과 같다 (`jobs/pointmaze_extra.txt`) |
 | `dinowm_pointmaze-released-at10-{mpccem,cem30,gd}-orig` | `pointmaze_{mpc,cem30,gd}_orig` | seed 99, 원본 코드 경로 (`DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0`) |
 | `dinowm_rope-dinov2s14-100ep-plr5e-5`, `…-plr5e-5-at100-{mpccem,predq}` | `train_rope_plr5e-5`, `rope_mpc_plr5e-5`, `pq_rope_plr5e-5` | Rope 재학습, predictor lr 5e-5 (논문 Table 12 값, `jobs/rope_plr.txt`) |
+| `dinowm_pourwater-dinov2s14-6ep-{h3f5,h1f5}` | `train_pw_{h3f5,h1f5}` | ACWM-Phys Pour Water world model, num_hist 3 / 1, frameskip 5, predictor lr 5e-5, 6 epoch, 배치 24 (`jobs/pour_water.txt`, SETTINGS.md §7) |
+| `dinowm_pourwater-dinov2s14-6ep-{h3f5,h1f5}-at6-predq` | `pq_pw_{h3f5,h1f5}` | Pour Water 예측 품질·롤아웃·물 양 평가 (`repro/eval/eval_pour_water.py`) |
 | `dinowm_{rope,granular}-dinov2s14-100ep-at100-mpccem-armvideo` | `{rope,granular}_mpc_arm` | `{rope,granular}_mpc` 와 같은 설정의 재실행 + 팔이 움직이는 평가 영상 (`repro/eval/deform_arm_video.py`, 큐 밖에서 실행). 같은 시작·목표 입자 상태지만 비트 단위 재현은 아니다 |
 
 ## 6. 코드 버전과 결과의 대응
@@ -75,8 +80,12 @@
 | 이 브랜치 `798234f` (`run_info.txt` 의 `commit=`) | `pointmaze_gd` `pointmaze_cem30` `{rope,granular}_mpc` `pq_*` |
 | 이 브랜치 `a482f6e` (`run_info.txt` 의 `commit=`, `repro/` 밖 코드는 `798234f` 와 같다) | `pointmaze_{mpc,cem30,gd}_{s1,s101,orig}` `train_rope_plr5e-5` `rope_mpc_plr5e-5` `pq_rope_plr5e-5`; `{rope,granular}_mpc_arm` 은 이 코드의 `plan.py` 를 `repro/eval/deform_arm_video.py`(그때는 main 작업 트리의 커밋 전 파일, 같은 동작으로 main `5180303` 에 커밋)로 돌렸다 |
 
+| 이 브랜치 `41606dc` (`run_info.txt` 의 `commit=`; 학습에 쓰는 코드는 `e2bbc0e` 의 `VWorldModel.forward` 수정과 main `d0c66eb` 의 로더) | `train_pw_{h3f5,h1f5}` (파일럿 `train_pw_pilot` 은 `e2bbc0e`, 결과에 쓰지 않는다) |
+| 이 브랜치 `0a75239` (평가 스크립트는 main `1c22b7c` + `dbb03d8`) | `pq_pw_{h3f5,h1f5}` |
+
 - 앞의 세 줄에 해당하는 작업은 `run_info.txt` 가 이전 형식(`chunk= sdpa= skip_solved= gdchunk=`, 브랜치·커밋 없음)이다. 작업별 코드 위치는 run.yaml 의 `code` 에 적었다. 결과 이슈에는 `hanbin5/local` 의 커밋과 이 대응을 함께 적는다.
 - 태그 설명의 "나누기 전에 시작한 작업은 이 커밋에서 돌았다" 는 `wall_cem30` 에만 맞다. 이 표가 정확하다.
 - `train_rope` 는 planning 쪽 수정(`cem.py`·`mpc.py`·`evaluator.py`)이 들어가기 전에 시작했지만 학습은 그 파일을 쓰지 않는다.
 - OOM 이나 코드 수정으로 중간에 멈춘 시도는 결과에 쓰지 않는다.
+- Pour Water 의 물 양 분석·그림·정성 비교(`eval_pour_water_volume.py`, `plot_pour_water.py`, `render_pour_water.py`)는 큐 밖에서 main `36834f5` 와 같은 내용의 파일(그때는 커밋 전 main 작업 트리)로 돌렸다. `eval_pour_water.py` 의 "action 0" 변형은 `36834f5` 에서 같은 값(정규화한 0)을 명시적으로 쓰도록 바꿨고 동작은 같다.
 - `repro/eval/eval_pred_quality.py` 는 공개 전 검토에서 부분 표본이 실행마다 달라지는 것을 찾아 `seed(training.seed)` 를 넣었다 (예측 품질 작업은 그 뒤에 시작한다).

@@ -7,8 +7,8 @@ import os, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXP = HERE  # repro/
 RUNS = os.environ["DINO_RUNS"]
-# 벤치마크와 그 뒤의 추가 실행 (시드 추가·원본 코드 경로, Rope predictor lr 5e-5 재학습)
-JOB_FILES = ["benchmark.txt", "pointmaze_extra.txt", "rope_plr.txt"]
+# 벤치마크와 그 뒤의 추가 실행 (시드 추가·원본 코드 경로, Rope predictor lr 5e-5 재학습, ACWM-Phys Pour Water)
+JOB_FILES = ["benchmark.txt", "pointmaze_extra.txt", "rope_plr.txt", "pour_water.txt"]
 # 큐 작업이 아닌 실행: 평가 영상에서 로봇 팔이 움직이게 같은 인자·환경으로 다시 돌린 것 (repro/eval/deform_arm_video.py)
 ARM_RERUNS = {"rope_mpc_arm": "rope_mpc", "granular_mpc_arm": "granular_mpc"}
 ARM_TOOL = "repro/eval/deform_arm_video.py (실행할 때는 커밋 전 main 작업 트리의 파일, 같은 동작으로 main 5180303 에 커밋)"
@@ -153,10 +153,49 @@ def runner_env_of(job):
 
 
 written = []
-for j in parse_jobs():
+JOBS = parse_jobs()
+BY_NAME = {j["name"]: j for j in JOBS}
+for j in JOBS:
     name, kind, args = j["name"], j["kind"], j["args"]
     common = dict(stack="dinowm", job=name)
-    if kind == "train":
+    if kind == "train" and name.startswith("train_pw_"):  # ACWM-Phys Pour Water (SETTINGS.md §7)
+        h = hydra_args(args)
+        rid = f"dinowm_pourwater-dinov2s14-{h['training.epochs']}ep-{name[len('train_pw_'):]}"
+        lr = {k: h.get(f"training.{k}_lr", v) for k, v in LR_DEFAULT.items()}
+        changed = [k for k in lr if lr[k] != LR_DEFAULT[k]]
+        lr_text = f"decoder {lr['decoder']}, predictor {lr['predictor']}, action encoder {lr['action_encoder']} " + (
+            "(upstream 기본값)" if not changed else "(" + ", ".join(f"{k} 를 바꿨다 — upstream {LR_DEFAULT[k]}, 논문 Table 12 는 predictor 5e-5" for k in changed) + ")")
+        d = dict(id=rid, kind="train", **common, env=h["env"],
+                 dataset="$DATASET_DIR/acwm_phys/particle/pour_water (HF t1an/ACWM-Phys 4017e5f). ind_train 1000개에서 episode_60–79 20개(물이 흩어져 붓는 장면이 없다)를 빼고 "
+                         "980개를 무작위 0.9/0.1 seed 42 로 나눠 학습 882 / 검증 98 에피소드, 에피소드마다 300프레임",
+                 model=dict(encoder="DINOv2 ViT-S/14 patch tokens, 동결 (hub 85a2460)", predictor="ViT depth 6, heads 16, mlp 2048, dropout 0.1",
+                            decoder="VQ-VAE decoder (quantize False), 같은 학습 안에서 따로 최적화: 정답 프레임 잠재(detach)를 재구성하는 MSE 만 학습",
+                            num_hist=int(h["num_hist"]), num_pred=1, frameskip=int(h["frameskip"]), img_size=224),
+                 training=dict(epochs=int(h["training.epochs"]), batch_size=int(h["training.batch_size"]),
+                               optimizer="predictor·action encoder AdamW, decoder Adam", lr=lr_text, seed=0,
+                               save_every_x_epoch=int(h["training.save_every_x_epoch"]),
+                               batch_note="논문은 32. num_hist 3 은 24 GB GPU 에서 32 가 OOM 이라 24 (LOCAL.md §2·§3)"),
+                 command=f"bash repro/queue/run_train.sh {name} <gpu> " + " ".join(args),
+                 output=f"$DINO_TRAIN/outputs/{name}/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)", code=code_of(name))
+        path = os.path.join(EXP, "runs", "train", rid, "run.yaml")
+    elif kind == "cmd" and "eval_pour_water.py" in " ".join(args):
+        m = re.search(r"eval_pour_water\.py (\S+) (\S+) (\S+)(?: --epoch (\d+))?", " ".join(args))
+        ckroot, mname, out, ep = m.groups()
+        th = hydra_args(BY_NAME[mname]["args"])
+        epoch = int(ep or th["training.epochs"])
+        rid = f"dinowm_pourwater-dinov2s14-{th['training.epochs']}ep-{mname[len('train_pw_'):]}-at{epoch}-predq"
+        d = dict(id=rid, kind="eval", **common, env=th["env"],
+                 model=dict(ckpt=f"{ckroot}/outputs/{mname}/checkpoints/model_{epoch}.pth", epoch=epoch, num_hist=int(th["num_hist"]), frameskip=int(th["frameskip"])),
+                 protocol=dict(sets="val(학습과 같은 분할의 98 에피소드), ind_test 50, ood_test 50 (첫 프레임 물 색 픽셀 수 4000 기준 낮음 26 / 높음 24)",
+                               one_step="슬라이스 5000개 (균등 간격), LPIPS(VGG)·SSIM·MSE — eval_pred_quality.py 와 같은 계산. 기준선 copy_last, recon_copy, recon_ceiling",
+                               open_loop="ACWM-Phys eval.py 와 같은 37프레임 창, 시작 linspace(0, 263, 10), 프레임 간격 frameskip. 표는 창 프레임 3 이상, 곡선은 예측 프레임 전부. 잠재 MSE·코사인, ACWM 방식 지표(240×240, [0, 1])와 정적 기준선",
+                               whole_episode="처음 num_hist 프레임 + 모든 action 으로 60 스텝. 끝 구간(프레임 250 이상) 상자 바닥 물 색 픽셀 수, 재구성으로 신뢰 관문(상대오차 10 % 이하)",
+                               action_sensitivity="다음 에피소드의 action / 정규화한 action 0 으로 교체",
+                               intervals="에피소드 단위 bootstrap 95 %"),
+                 command=f"bash repro/queue/run_cmd.sh {name} <gpu> " + " ".join(args), runner_env=runner_env_of(name), code=code_of(name),
+                 output=out, results="output json 의 sets.<val|ind_test|ood_test>.{m1, m2, m2_curve, m2_latent, acwm, m5, m3_curve, m3_fill}")
+        path = os.path.join(EXP, "runs", "eval", rid, "run.yaml")
+    elif kind == "train":
         h = hydra_args(args)
         obj, rid, _ = trained(name)
         assert obj == h["env.dataset.object_name"], name
