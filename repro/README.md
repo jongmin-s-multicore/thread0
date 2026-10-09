@@ -53,11 +53,11 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
 한 셸(bash 또는 zsh)에서 레포 루트로 차례로 실행한다. 아래 명령 블록에는 일부러 `#` 주석을 넣지 않는다 — zsh 는 `setopt interactivecomments` 가 꺼져 있으면(oh-my-zsh 등이 켜지 않은 기본 상태) 줄 끝 `# ...` 을 명령의 인자로 넘긴다.
 
 0. 사전 준비: NVIDIA 드라이버, `git curl bzip2 unzip zip gcc`, mujoco-py 빌드용 `libglew-dev libgl1-mesa-dev`. `/usr/lib/nvidia` 가 없으면(우분투 드라이버 패키지가 만든다) mujoco-py 가 CPU 렌더러로 빌드되고 `libosmesa6-dev` 도 필요하다. Rope·Granular planning 에는 docker + NVIDIA container runtime (sudo 없이 docker 그룹). 디스크는 `$DINO_WORK` 에 PointMaze·PushT·Wall 약 110 GB, Rope·Granular 약 160 GB 더 (압축을 푸는 동안 15 GB 더) — 홈이 작으면 큰 디스크를 작업 루트로 정한다.
-1. 레포와 작업 루트. 레포 위치는 어디든 된다. `DINO_WORK` 는 레포 밖에 둔다 (기본값 `~/dinowm`). 다른 경로를 쓰면 새 셸마다 다시 export 하거나 `.claude/env.local.sh` (gitignore, 아래 "머신별 설정")에 적는다.
+1. 레포와 작업 루트. 홈 디렉토리를 가정하지 않는다. 아래 명령은 지금 디렉토리에 clone 하고, 레포 위치는 어디든 된다. `DINO_WORK` 는 레포 밖이면 어디든 된다 — 셋째 줄의 `~/dinowm` 은 기본값일 뿐이라 홈이 작으면 큰 디스크 경로로 바꾼다. 다른 경로를 쓰면 새 셸마다 다시 export 하거나 `.claude/env.local.sh` (gitignore, 아래 "머신별 설정")에 적는다. 홈 아래로 고정되는 것은 MuJoCo(`~/.mujoco/mujoco210`, mujoco-py 의 기본 위치) 하나이고, 이것도 `MUJOCO_DIR` 로 바꿀 수 있다.
 
    ```bash
-   git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0
-   cd ~/thread0
+   git clone https://github.com/jongmin-s-multicore/thread0.git
+   cd thread0
    export DINO_WORK=~/dinowm
    ```
 
