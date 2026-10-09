@@ -112,25 +112,56 @@ For Rope and Granular, plain encode–decode reconstruction of the target frame 
 
 ## Running it
 
-Hardware used: two 24 GB GPUs (RTX 3090 Ti + RTX 3090) on Ubuntu 24.04. Setup scripts and the job queue are in `repro/` ([repro/README.md](repro/README.md), Korean).
+Hardware used: two 24 GB GPUs (RTX 3090 Ti + RTX 3090) on Ubuntu 24.04. Setup scripts and the job queue are in `repro/` ([repro/README.md](repro/README.md), Korean). Run the commands below in one bash or zsh shell, from the repo root. The code blocks contain no `#` comments on purpose: zsh without `setopt interactivecomments` (the default unless e.g. oh-my-zsh turns it on) passes an inline `# ...` to the command as arguments.
+
+**Requirements**
+
+- An NVIDIA driver, `git curl bzip2 unzip zip gcc`, and `libglew-dev libgl1-mesa-dev` for building mujoco-py. mujoco-py builds its GPU (EGL) renderer if `/usr/lib/nvidia` exists (Ubuntu's driver packages create it) and a CPU renderer otherwise, which also needs `libosmesa6-dev`.
+- For Rope and Granular planning: docker with the NVIDIA container runtime, usable without sudo (`docker` group).
+- Disk space in the work root `$DINO_WORK` (default `~/dinowm`): about 110 GB for PointMaze, PushT and Wall (Python env 9 GB, data 91 GB, checkpoints 1 GB, zip files 6 GB), and about 160 GB more for Rope and Granular (data 144 GB, zip files 15 GB, plus a 15 GB temporary file while unzipping). The zip files in `$DINO_WORK/downloads` can be deleted after unzipping. If your home directory is small, choose a work root on a larger disk.
+
+**Install**
 
 ```bash
-git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0 && cd ~/thread0
-export DINO_WORK=~/dinowm                    # work root outside the repo (env, data, checkpoints, runs)
-bash repro/setup/install_env.sh              # micromamba env (Python 3.9) + MuJoCo 2.1.0 + mujoco-py
-bash repro/setup/install_pyflex.sh           # only for Rope/Granular (docker build)
-bash repro/setup/download_data.sh core checkpoints   # PointMaze, PushT, Wall + released checkpoints (OSF)
-bash repro/setup/download_data.sh deformable         # Rope, Granular
-source repro/env.sh && bash repro/setup/check_env.sh
-
-# one quick planning run with the released PointMaze model (2 episodes)
-python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
-  n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
-
-bash repro/queue/start.sh                    # all benchmark jobs (repro/jobs/benchmark.txt)
+git clone https://github.com/jongmin-s-multicore/thread0.git ~/thread0
+cd ~/thread0
+export DINO_WORK=~/dinowm
+bash repro/setup/install_env.sh
 ```
 
-The setup scripts are the commands we ran by hand on the machine above. Every command was run (pip packages were installed with uv; the plain-pip and CPU-renderer fallbacks were not run), but the scripts have not been run end to end on a fresh machine.
+The repo can be cloned anywhere. `DINO_WORK` is the work root for the env, data, checkpoints and run outputs; keep it outside the repo. Every script reads `DINO_WORK` from the environment and falls back to `~/dinowm`. If you choose another path, set it again in every new shell (for example in `~/.bashrc`), or write `export DINO_WORK=${DINO_WORK:-/your/path}` into `.claude/env.local.sh` in the repo (gitignored; `repro/env.sh` reads it first).
+
+`install_env.sh` creates a micromamba env (Python 3.9 with the pinned versions of `environment.yaml`), installs MuJoCo 2.1.0 into `~/.mujoco/mujoco210` and builds mujoco-py. It installs the pip packages (about 4 GB of downloads) with uv if `uv` is on `PATH`, otherwise with pip. `bash repro/setup/install_env.sh --dry-run` prints the commands without running them.
+
+For Rope and Granular only, build PyFleX (in docker):
+
+```bash
+bash repro/setup/install_pyflex.sh
+```
+
+**Data and released checkpoints** from the authors' OSF project. `core` is PointMaze, PushT and Wall; `deformable` is Rope and Granular. If a download is interrupted, run the same command again and it resumes.
+
+```bash
+bash repro/setup/download_data.sh core checkpoints
+bash repro/setup/download_data.sh deformable
+```
+
+**Check and one quick planning run.** `source repro/env.sh` sets the paths and puts the env's `python` first on `PATH`; run it in every new shell. `check_env.sh` tests torch/CUDA, mujoco-py and DINOv2, then replays dataset actions in PointMaze, PushT and Wall and compares the frames with the dataset (`check_env.sh --pyflex` adds Rope and Granular). The `plan.py` command plans 2 episodes with the released PointMaze model (under a minute) and writes to `$DINO_RUNS/smoke/point_maze`.
+
+```bash
+source repro/env.sh
+bash repro/setup/check_env.sh
+python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
+  n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
+```
+
+**All benchmark jobs** (`repro/jobs/benchmark.txt`) run in a background job queue; its log is `$DINO_RUNS/scheduler.log`. GPUs, jobs per GPU and free-memory thresholds are set with environment variables ([repro/README.md](repro/README.md), "머신별 설정").
+
+```bash
+bash repro/queue/start.sh
+```
+
+**What was tested.** On 2026-10-09 we ran the commands above on the machine above in bash, with an empty home directory, a clean environment (`env -i`) and pip (no uv on `PATH`). Every step succeeded, including `check_env.sh --pyflex` and the quick planning run. Not repeated in that run: the `core` and `deformable` downloads (we linked our existing data instead; the `checkpoints` download, which uses the same downloader, was run) and the job queue. In a separate Ubuntu 24.04 container without `/usr/lib/nvidia`, the mujoco-py build failed without `libosmesa6-dev` and succeeded with it; its PointMaze frames differ from the dataset frames by a mean of 0.03 on the 0–255 scale (0.00 with the GPU renderer). Other Linux distributions and other GPUs are untested.
 
 ## Branches and changes to upstream
 
