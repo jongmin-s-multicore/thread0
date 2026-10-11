@@ -1,0 +1,21 @@
+# Local override of train.yaml for a single-GPU workstation
+# (RTX 4070 Ti Super, 16GB VRAM, ~15GB system RAM, WSL2).
+#
+# Leaves the cluster defaults in train.yaml untouched. Use with:
+#   python train.py --config-name train_local env=point_maze
+#
+# Everything not listed here is inherited from train.yaml.
+defaults:
+  - train
+  - _self_
+
+# NOTE: train.yaml's SLURM (submitit) launcher is only used for multirun
+# sweeps (-m). A plain `python train.py` run never invokes it, so it is left
+# as-is. For local sweeps, add `hydra/launcher=basic` AND clear the submitit
+# keys in train.yaml.
+
+training:
+  batch_size: 8        # 32 is sized for an 80GB H100; 8 fits 16GB VRAM. Raise if headroom.
+
+env:
+  num_workers: 4       # 16 exceeds your 12 cores and bloats dataloader RAM.

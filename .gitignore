@@ -1,4 +1,13 @@
 __pycache__
 *.pyc
+
+# training / planning outputs (hydra run dirs, checkpoints, plots, videos)
 outputs
 plan_outputs
+multirun
+.submitit
+wandb
+
+# large local assets at the repo root (anchored so source dirs like env/wall/data/ stay tracked)
+/data
+/checkpoints
