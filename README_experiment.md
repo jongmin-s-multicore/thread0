@@ -52,6 +52,29 @@ Without DAVIS (e.g. a laptop), swap in procedurally generated backgrounds:
 MUJOCO_GL=osmesa bash scripts/run_all.sh --smoke --bg_source synthetic
 ```
 
+### Running the smoke test on a local workstation
+
+The smoke test is small enough for a single consumer GPU (it was sized for a
+16GB card). Three things differ from the instance:
+
+```bash
+# 1) dataloader workers: conf/env/* ships num_workers=16, sized for the A100 box
+# 2) --obs_format pth avoids the decord dependency for tiny datasets
+# 3) MUJOCO_GL=osmesa if the local box has no working EGL
+bash scripts/run_all.sh --smoke --num_gpus 1 \
+     --train_extra "env.num_workers=2" \
+     --obs_format pth \
+     --collect_workers 2
+```
+
+Local smoke runs are a code check only. Delete the artifacts before the real run
+so that training does not resume from a 2-epoch checkpoint, and do not upload
+locally generated frames: the instance regenerates them from the seed.
+
+```bash
+rm -rf "$EXP_ROOT"/{.state,outputs,results} "$DATASET_DIR"/distracting_reacher
+```
+
 `run_all.sh` writes a marker per finished stage into `$EXP_ROOT/.state/`, so
 re-running it skips completed stages. Force one with `--redo collect|train|eval|all`.
 

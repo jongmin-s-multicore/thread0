@@ -33,6 +33,8 @@ CACHE_FEATURES=0
 GDRIVE_REMOTE="${RCLONE_REMOTE:-}"
 REDO=""
 COLLECT_WORKERS=""
+OBS_FORMAT="mp4"
+TRAIN_EXTRA=""        # raw hydra overrides, e.g. "env.num_workers=2"
 
 DATASET_DIR="${DATASET_DIR:-/workspace/data}"
 EXP_ROOT="${EXP_ROOT:-/workspace/exp}"
@@ -57,6 +59,8 @@ while [[ $# -gt 0 ]]; do
     --dataset_dir) DATASET_DIR="$2"; shift 2;;
     --exp_root) EXP_ROOT="$2"; shift 2;;
     --collect_workers) COLLECT_WORKERS="$2"; shift 2;;
+    --obs_format) OBS_FORMAT="$2"; shift 2;;      # mp4 (default) | pth (no decord)
+    --train_extra) TRAIN_EXTRA="$2"; shift 2;;    # extra hydra overrides for train.py
     --redo) REDO="$2"; shift 2;;
     -h|--help) usage 0;;
     *) echo "unknown arg: $1" >&2; usage 2;;
@@ -143,7 +147,7 @@ else
     --gpu_ids "$GPU_LIST" \
     --mujoco_gl "$MUJOCO_GL" \
     --bg_source "$BG_SOURCE" \
-    --obs_format mp4
+    --obs_format "$OBS_FORMAT"
   echo "[run_all] check the sample grid: $DATA_ROOT/samples/grid_clean_vs_distract.png"
 fi
 
@@ -170,9 +174,10 @@ if is_done train; then
   log "stage 'train' already done -> skipping"
 else
   log "training models A (clean) and B (distract) on GPUs [$GPU_LIST]"
+  # TRAIN_EXTRA is intentionally unquoted: it carries several hydra overrides
   timed train bash scripts/train.sh \
     --gpus "$GPU_LIST" --epochs "$EPOCHS" --batch_size "$BATCH_SIZE" \
-    --exp_root "$EXP_ROOT"
+    --exp_root "$EXP_ROOT" $TRAIN_EXTRA
 fi
 
 # --------------------------------------------------------------------------- #
