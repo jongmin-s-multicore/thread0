@@ -227,8 +227,11 @@ python scripts/eval.py --ckpt_base_path $EXP_ROOT --phases rollout,latent
 # one condition on one GPU
 python scripts/eval.py --ckpt_base_path $EXP_ROOT --conditions T4_mismatch --gpu 1
 
-# stronger T4 mismatch
-python scripts/eval.py --ckpt_base_path $EXP_ROOT --conditions T4_mismatch --mismatch_shift 80
+# weaker T4 mismatch (fraction of each video's length; 0.5 = farthest frame).
+# A different value is a different T4: eval.py refuses to append to results
+# written with another one, so point --results_dir elsewhere.
+python scripts/eval.py --ckpt_base_path $EXP_ROOT --conditions T4_mismatch \
+    --mismatch_frac 0.25 --results_dir $EXP_ROOT/results_mm025
 
 # re-analyze at any time (safe while eval is running)
 python scripts/analyze.py --results_dir $EXP_ROOT/results
@@ -249,3 +252,32 @@ python scripts/analyze.py --results_dir $EXP_ROOT/results
 | training OOM | lower `--batch_size`; `has_decoder=false` also cuts memory |
 | `wandb` login prompt | `WANDB_MODE=offline` is the default in `train.sh`; sync later with `wandb sync` |
 | Drive uploads but checkpoints never appear | `--min-age 5m` means a file must be 5 minutes old; wait one checkpoint interval |
+
+---
+
+## 9. 테스트 조건 T1~T4 (요약)
+
+네 조건 모두 플래너는 **25 env step 뒤의 모습**(`goal_H 5 × frameskip 5`)을 예측하고, 그 예측을 목표 사진과 비교합니다.
+"배경이 같다/다르다"는 **비교하는 시점**을 기준으로 정의합니다.
+
+| 조건 | 팔 뒤 배경 | 배경 영상 | 목표 사진 배경 | 비교 시점의 배경 비교 | 무엇을 보는가 |
+|---|---|---|---|---|---|
+| **T1** clean | 기본 배경 (정지) | 없음 | 기본 배경 | 같음 | 기준선: 방해 요소가 없을 때의 성능 |
+| **T2** train_bg | 영상 재생 | 학습 때 본 영상 | 비교 시점의 프레임 | **같음** | 배경이 움직이기만 할 때 버티는가 |
+| **T3** val_bg | 영상 재생 | **처음 보는 영상** | 비교 시점의 프레임 | **같음** | 처음 보는 배경에서도 버티는가 |
+| **T4** mismatch | 영상 재생 | 학습 때 본 영상 | 비교 시점 + **영상 길이의 절반** (Δ) | **다름** | 목표 사진과 배경이 어긋나면 버티는가 |
+
+MPC는 계획을 최대 3번 다시 세우고, 그때마다 목표 사진을 새 비교 시점에 맞춰 다시 렌더링합니다.
+아래 숫자는 에피소드의 배경 시작 프레임(`obs_offset`)으로부터 몇 프레임 뒤의 배경인지를 뜻합니다.
+예시는 60프레임 영상이라 Δ = 30이고, DAVIS에서는 영상마다 길이가 달라 Δ도 달라집니다.
+
+| MPC 계획 | 예측하는 시점 | T2/T3 목표 사진 | T4 목표 사진 (Δ = 30 예시) |
+|---|---|---|---|
+| 1번째 | 25 | 25 | 25 + 30 = 55 |
+| 2번째 | 50 | 50 | 80 |
+| 3번째 | 75 | 75 | 105 |
+
+- latent phase는 25 step 진행한 실제 관측과 비교하므로 목표 사진을 25번째 프레임(+ T4는 Δ)으로 렌더링합니다.
+- rollout phase는 목표 사진을 쓰지 않습니다.
+- 각 기록에는 `bg_protocol: goal_sync_v1`, `goal_delta`, MPC 계획별 목표 프레임(`goal_offset_per_mpc_iter`)이 남습니다.
+- Δ는 `--mismatch_frac`(기본 0.5)로 바꿀 수 있습니다. 값이 다르면 다른 T4이므로 `--results_dir`를 따로 지정해야 합니다.

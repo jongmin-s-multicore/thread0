@@ -43,15 +43,22 @@ the cost can be minimized by matching the background rather than the arm.
 
 ## Test conditions
 
-| | background | goal vs observation background |
+| | background | goal vs observation background, at the time the cost compares them |
 |---|---|---|
 | T1_clean | default skybox | same |
-| T2_train_bg | DAVIS **train** video | same |
-| T3_val_bg | DAVIS **val** video (unseen) | same |
-| T4_mismatch | DAVIS **train** video | **different frame offset** |
+| T2_train_bg | DAVIS **train** video | same frame |
+| T3_val_bg | DAVIS **val** video (unseen) | same frame |
+| T4_mismatch | DAVIS **train** video | **half the video's length apart** (`--mismatch_frac 0.5`) |
 
 T4 uses train-split videos on purpose: it isolates "goal and observation
 backgrounds disagree" from "the background is novel", which is T3's job.
+
+The video advances one frame per env step, so "same background" is defined at
+the env step `t_eval` the cost refers to: the goal image is rendered with frame
+`obs_offset + t_eval + delta` (`delta` = 0 except T4). `scripts/eval.py`
+re-renders the goal every MPC iteration (`t_eval` = end of that iteration's
+plan) and in the latent phase (`t_eval` = end of the random rollout). Records
+carry `bg_protocol: goal_sync_v1`.
 
 ## Metrics and what each one rules out
 
@@ -87,6 +94,14 @@ patching [env/venv.py](env/venv.py).
 
 ## Gotchas worth remembering
 
+* Never render the goal once at frame `offset + 0`. Before `goal_sync_v1`, it was
+  rendered that way: T2/T3 were then mismatched by `goal_H * frameskip` = 25
+  frames at cost time, and T4's fixed 25-frame shift made it the *matched*
+  condition. `eval.py` refuses to resume into jsonl from another protocol.
+* Background frames wrap modulo the video length, so a mismatch must be checked
+  against the video's *visual* period, not just its length. The synthetic
+  source used to repeat every 15 of its 60 frames, which made a half-length T4
+  a no-op.
 * `conf/plan_distracting_reacher.yaml` sets `planner.max_iter: 3`. Upstream's
   `null` means "loop until every episode succeeds", which never terminates under
   heavy distractors.

@@ -114,21 +114,25 @@ class BackgroundSource:
                     im = im.convert("RGB").resize((out_hw[1], out_hw[0]), Image.BILINEAR)
                     frame = np.asarray(im, dtype=np.uint8)
             else:
-                frame = _synthetic_frame(self.synthetic_seed, idx, out_hw)
+                frame = _synthetic_frame(self.synthetic_seed, idx, out_hw, self.n_frames)
             if len(self._cache) > 8:  # reads are sequential; keep the cache tiny
                 self._cache.clear()
             self._cache[key] = frame
         return self._cache[key]
 
 
-def _synthetic_frame(seed, idx, out_hw):
+def _synthetic_frame(seed, idx, out_hw, n_frames):
     """Deterministic moving-pattern frame, for runs without DAVIS."""
     h, w = out_hw
     rng = np.random.RandomState(seed)
     c1 = rng.randint(0, 255, size=3).astype(np.float32)
     c2 = rng.randint(0, 255, size=3).astype(np.float32)
     freq = rng.uniform(2.0, 6.0)
-    phase = 2.0 * np.pi * (idx / 30.0)
+    # sin(x + p) * cos(y - p) repeats every pi of phase, so this makes the video
+    # repeat exactly every n_frames, as the wrap in BackgroundSource.get assumes.
+    # (A 2*pi/30 step repeated every 15 frames: shifts of 15, 30, ... frames,
+    # e.g. a T4 mismatch of half a 60-frame video, were no shift at all.)
+    phase = np.pi * idx / n_frames
     yy, xx = np.meshgrid(
         np.linspace(0, 1, h, dtype=np.float32),
         np.linspace(0, 1, w, dtype=np.float32),

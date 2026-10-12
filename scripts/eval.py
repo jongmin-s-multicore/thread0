@@ -6,11 +6,27 @@ Conditions
     T1_clean      default skybox, as in the clean training data
     T2_train_bg   a DAVIS *train* video background (the ones model B saw)
     T3_val_bg     a DAVIS *val* video background (never seen in training)
-    T4_mismatch   DAVIS *train* video, but the goal image is taken at a different
-                  frame of that video than the one the rollout starts from.
+    T4_mismatch   DAVIS *train* video, but the goal image shows a different frame
+                  of that video (--mismatch_frac of its length away) than the
+                  observation at the time the cost is evaluated.
                   Train-split videos are used on purpose, so T4 isolates
                   "background differs between goal and observation" from
                   "background is novel" (which is T3).
+
+Goal background timing
+----------------------
+The video background advances one frame per env step, so "goal and observation
+share a background" only means something at a given time. The goal image is
+therefore rendered with the background frame that the observation will show at
+the moment the cost compares them:
+
+    goal frame = obs offset + t_eval + delta      (delta = 0 except in T4)
+
+t_eval is the env step the compared observation belongs to: the end of the plan
+for each MPC iteration (the goal is re-rendered every iteration), the end of
+the random rollout in the latent phase. Rendering the goal at offset+0 instead
+makes T2/T3 mismatched by t_eval frames and, with t_eval == delta, makes T4 the
+matched one.
 
 Phases (any subset, --phases)
 -----------------------------
@@ -55,6 +71,10 @@ CONDITIONS = {
 
 PHASES = ("plan", "rollout", "latent")
 
+# Bumped whenever the meaning of a condition changes. Results written under a
+# different protocol are refused on resume rather than silently mixed in.
+BG_PROTOCOL = "goal_sync_v1"
+
 
 # --------------------------------------------------------------------------- #
 # small helpers
@@ -98,6 +118,32 @@ def done_episodes(path):
     return done
 
 
+# phases whose numbers depend on the goal image (rollout never renders one)
+GOAL_PHASES = ("plan", "latent")
+
+
+def check_protocol(path, mismatch_frac):
+    """Refuse to resume into a jsonl written under another goal-background
+    protocol or T4 shift: its episodes would be skipped as done and the file
+    would mix two different definitions of the same condition."""
+    if not Path(path).exists():
+        return
+    with open(path) as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            got = (rec.get("bg_protocol"), rec.get("mismatch_frac"))
+            if got != (BG_PROTOCOL, mismatch_frac):
+                raise SystemExit(
+                    f"{path} was written with bg_protocol/mismatch_frac={got}, "
+                    f"this run uses {(BG_PROTOCOL, mismatch_frac)}. Move it aside "
+                    "(do not delete: it is a past result) and re-run."
+                )
+            return
+
+
 class JsonlWriter:
     def __init__(self, path):
         self.path = Path(path)
@@ -125,33 +171,52 @@ def _json_default(o):
     return str(o)
 
 
-def background_plan(cond, seed, n_videos, n_frames_hint=50, mismatch_shift=25):
-    """Per-episode background choice, derived from the episode seed only."""
+def background_plan(cond, seed, video_lens, mismatch_frac=0.5):
+    """Per-episode background choice, derived from the episode seed only.
+
+    The goal background is not fixed here: it depends on when the cost is
+    evaluated, see goal_bg_cfg().
+    """
     spec = CONDITIONS[cond]
     if not spec["bg_enabled"]:
         return {
             "bg_enabled": False,
             "bg_split": spec["bg_split"],
             "obs": {"bg_video_idx": 0, "bg_frame_offset": 0},
-            "goal": {"bg_video_idx": 0, "bg_frame_offset": 0},
+            "goal_delta": 0,
+            "video_len": None,
         }
     rs = np.random.RandomState(seed + 777)
-    video_idx = int(rs.randint(0, max(n_videos, 1)))
+    video_idx = int(rs.randint(0, max(len(video_lens), 1)))
     offset = int(rs.randint(0, 10_000))
-    obs_cfg = {"bg_video_idx": video_idx, "bg_frame_offset": offset}
+    n_frames = int(video_lens[video_idx])
+    delta = 0
     if spec["mismatch"]:
-        # same video, a clearly different point in time
-        goal_cfg = {
-            "bg_video_idx": video_idx,
-            "bg_frame_offset": offset + mismatch_shift,
-        }
-    else:
-        goal_cfg = dict(obs_cfg)
+        # same video, a different point in time. A fraction of the video length
+        # (not a fixed shift) because frames wrap modulo the length: a fixed
+        # shift equal to a short video's length would be no mismatch at all.
+        delta = int(round(mismatch_frac * n_frames)) % n_frames
+        if delta == 0:
+            raise SystemExit(
+                f"T4 mismatch is a no-op: mismatch_frac={mismatch_frac} on a "
+                f"{n_frames}-frame video (video idx {video_idx})."
+            )
     return {
         "bg_enabled": True,
         "bg_split": spec["bg_split"],
-        "obs": obs_cfg,
-        "goal": goal_cfg,
+        "obs": {"bg_video_idx": video_idx, "bg_frame_offset": offset},
+        "goal_delta": delta,
+        "video_len": n_frames,
+    }
+
+
+def goal_bg_cfg(bg_plan, t_eval):
+    """Goal background for a cost evaluated at env step t_eval: the frame the
+    observation shows at that step, shifted by the T4 delta."""
+    obs = bg_plan["obs"]
+    return {
+        "bg_video_idx": obs["bg_video_idx"],
+        "bg_frame_offset": obs["bg_frame_offset"] + int(t_eval) + bg_plan["goal_delta"],
     }
 
 
@@ -228,16 +293,93 @@ def load_everything(model_dir, device, n_envs, env_kwargs_override, dset_n_rollo
     return model_cfg, wm, dset, preprocessor, venv
 
 
+def goal_sync_mpc_class():
+    """MPCPlanner whose goal image is re-rendered every MPC iteration, so the
+    goal background matches the frame the plan's last step will see.
+
+    plan() is upstream planning/mpc.py MPCPlanner.plan with one addition (the
+    goal_fn call at the top of each iteration); upstream is subclassed, not
+    edited. Built lazily so importing this script does not import torch.
+    """
+    import torch
+
+    from planning.mpc import MPCPlanner
+    from utils import slice_trajdict_with_t
+
+    class GoalSyncMPCPlanner(MPCPlanner):
+        def __init__(self, goal_fn, **kwargs):
+            super().__init__(**kwargs)
+            self.goal_fn = goal_fn  # iteration -> (obs_g, goal frame offsets)
+            self.goal_offsets = []  # per iteration, per env
+
+        def plan(self, obs_0, obs_g=None, actions=None):
+            n_evals = obs_0["visual"].shape[0]
+            self.is_success = np.zeros(n_evals, dtype=bool)
+            self.action_len = np.full(n_evals, np.inf)
+            init_obs_0, init_state_0 = self.evaluator.get_init_cond()
+
+            cur_obs_0 = obs_0
+            memo_actions = None
+            while not np.all(self.is_success) and self.iter < self.max_iter:
+                obs_g, offsets = self.goal_fn(self.iter)
+                self.goal_offsets.append(offsets)
+                self.evaluator.assign_goal_cond(obs_g, self.evaluator.state_g)
+
+                self.sub_planner.logging_prefix = f"plan_{self.iter}"
+                actions, _ = self.sub_planner.plan(
+                    obs_0=cur_obs_0, obs_g=obs_g, actions=memo_actions
+                )
+                taken_actions = actions.detach()[:, : self.n_taken_actions]
+                self._apply_success_mask(taken_actions)
+                memo_actions = actions.detach()[:, self.n_taken_actions :]
+                self.planned_actions.append(taken_actions)
+
+                print(f"MPC iter {self.iter} Eval ------- ")
+                action_so_far = torch.cat(self.planned_actions, dim=1)
+                self.evaluator.assign_init_cond(obs_0=init_obs_0, state_0=init_state_0)
+                logs, successes, e_obses, e_states = self.evaluator.eval_actions(
+                    action_so_far,
+                    self.action_len,
+                    filename=f"plan{self.iter}",
+                    save_video=True,
+                )
+                new_successes = successes & ~self.is_success
+                self.is_success = self.is_success | successes
+                self.action_len[new_successes] = (self.iter + 1) * self.n_taken_actions
+
+                logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}
+                logs.update({"step": self.iter + 1})
+                self.wandb_run.log(logs)
+                self.dump_logs(logs)
+
+                cur_obs_0 = slice_trajdict_with_t(e_obses, start_idx=-1)
+                self.evaluator.assign_init_cond(
+                    obs_0=cur_obs_0, state_0=e_states[:, -1]
+                )
+                self.iter += 1
+
+            planned_actions = torch.cat(self.planned_actions, dim=1)
+            self.evaluator.assign_init_cond(obs_0=init_obs_0, state_0=init_state_0)
+            return planned_actions, self.action_len
+
+    return GoalSyncMPCPlanner
+
+
 def make_planner(plan_cfg, wm, venv, dset, frameskip, objective_fn, preprocessor,
-                 evaluator, log_filename):
-    import hydra
+                 evaluator, log_filename, goal_fn):
     from omegaconf import OmegaConf
 
     from plan import DummyWandbRun
 
     planner_cfg = OmegaConf.to_container(plan_cfg["planner"], resolve=True)
-    planner = hydra.utils.instantiate(
-        planner_cfg,
+    target = planner_cfg.pop("_target_")
+    if target != "planning.mpc.MPCPlanner":
+        raise SystemExit(
+            f"eval.py re-renders the goal per MPC iteration and needs "
+            f"planning.mpc.MPCPlanner; the plan config asks for {target}."
+        )
+    return goal_sync_mpc_class()(
+        goal_fn=goal_fn,
         wm=wm,
         env=venv,
         action_dim=dset.action_dim * frameskip,
@@ -246,8 +388,8 @@ def make_planner(plan_cfg, wm, venv, dset, frameskip, objective_fn, preprocessor
         evaluator=evaluator,
         wandb_run=DummyWandbRun(),
         log_filename=log_filename,
+        **planner_cfg,
     )
-    return planner
 
 
 # --------------------------------------------------------------------------- #
@@ -255,36 +397,63 @@ def make_planner(plan_cfg, wm, venv, dset, frameskip, objective_fn, preprocessor
 # --------------------------------------------------------------------------- #
 
 
-def prepare_batch(venv, cond, ep_ids, base_seed, n_videos, mismatch_shift):
-    """Init/goal states and observations for one batch of episodes.
+def render_goal(venv, cond, batch, t_eval):
+    """Goal image for a cost evaluated at env step t_eval (scalar or one per
+    env). Leaves the observation background set, so whatever rolls out next
+    sees the observation background. Returns (obs_g, goal frame offsets)."""
+    spec = CONDITIONS[cond]
+    n = len(batch["seeds"])
+    t_eval = np.broadcast_to(np.asarray(t_eval, dtype=int), (n,))
+    cfgs = [goal_bg_cfg(p, t) for p, t in zip(batch["bg_plans"], t_eval)]
+    set_bg(venv, spec, cfgs)
+    obs_g, _ = venv.prepare(batch["seeds"], batch["goal_states"])
+    set_bg(venv, spec, [p["obs"] for p in batch["bg_plans"]])
+    obs_g = {k: np.expand_dims(v, axis=1) for k, v in obs_g.items()}
+    return obs_g, [c["bg_frame_offset"] for c in cfgs]
 
-    The goal image is rendered with the goal background, then the background is
-    switched back to the observation one *before* anything rolls out, so the
-    planner/evaluator always see the observation background.
-    """
+
+def prepare_batch(venv, cond, ep_ids, base_seed, video_lens, mismatch_frac, goal_t):
+    """Init/goal states and observations for one batch of episodes, with the
+    goal rendered for a cost evaluated at env step goal_t."""
     spec = CONDITIONS[cond]
     seeds = [episode_seed(base_seed, ep) for ep in ep_ids]
     bg_plans = [
-        background_plan(cond, s, n_videos, mismatch_shift=mismatch_shift) for s in seeds
+        background_plan(cond, s, video_lens, mismatch_frac=mismatch_frac)
+        for s in seeds
     ]
 
     init_states, goal_states = venv.sample_random_init_goal_states(seeds)
 
-    set_bg(venv, spec, [p["goal"] for p in bg_plans])
-    obs_g, state_g = venv.prepare(seeds, goal_states)
-
+    # prepare() only to read the goal state back exactly as the env sets it
     set_bg(venv, spec, [p["obs"] for p in bg_plans])
+    _, state_g = venv.prepare(seeds, goal_states)
     obs_0, state_0 = venv.prepare(seeds, init_states)
-
     obs_0 = {k: np.expand_dims(v, axis=1) for k, v in obs_0.items()}
-    obs_g = {k: np.expand_dims(v, axis=1) for k, v in obs_g.items()}
-    return {
+
+    batch = {
         "seeds": seeds,
         "bg_plans": bg_plans,
+        "goal_states": goal_states,
         "obs_0": obs_0,
-        "obs_g": obs_g,
         "state_0": state_0,
         "state_g": state_g,
+    }
+    batch["obs_g"], batch["goal_offsets"] = render_goal(venv, cond, batch, goal_t)
+    batch["goal_t"] = int(goal_t)
+    return batch
+
+
+def bg_record(bg_plan, goal_offset):
+    """Exact background provenance for one episode record."""
+    return {
+        "protocol": BG_PROTOCOL,
+        "enabled": bg_plan["bg_enabled"],
+        "split": bg_plan["bg_split"],
+        "video_idx": bg_plan["obs"]["bg_video_idx"],
+        "video_len": bg_plan["video_len"],
+        "obs_offset": bg_plan["obs"]["bg_frame_offset"],
+        "goal_delta": bg_plan["goal_delta"],
+        "goal_offset": goal_offset,
     }
 
 
@@ -314,8 +483,17 @@ def run_plan_phase(ctx, cond, ep_ids):
     args, device = ctx["args"], ctx["device"]
     frameskip = ctx["frameskip"]
 
+    planner_cfg = ctx["plan_cfg"]["planner"]
+    horizon = int(planner_cfg["sub_planner"]["horizon"])
+    n_taken = int(planner_cfg["n_taken_actions"])
+
+    def plan_end_t(mpc_iter):
+        # env step of the plan's last imagined frame in this MPC iteration
+        return (mpc_iter * n_taken + horizon) * frameskip
+
     batch = prepare_batch(
-        venv, cond, ep_ids, args.seed, ctx["n_videos"], args.mismatch_shift
+        venv, cond, ep_ids, args.seed, ctx["video_lens"], args.mismatch_frac,
+        goal_t=plan_end_t(0),
     )
 
     evaluator = PlanEvaluator(
@@ -342,6 +520,7 @@ def run_plan_phase(ctx, cond, ep_ids):
         pre,
         evaluator,
         log_filename=str(ctx["planner_log"]),
+        goal_fn=lambda it: render_goal(venv, cond, batch, plan_end_t(it)),
     )
 
     t0 = time.time()
@@ -363,16 +542,21 @@ def run_plan_phase(ctx, cond, ep_ids):
     e_final_state = e_states[np.arange(e_states.shape[0]), last_idx]
     per_ep = venv.eval_state(batch["state_g"], e_final_state)
 
-    # what the planner believed: latent cost of its own imagined rollout
+    # Each cost below is scored against the goal rendered for the time of the
+    # observation it compares, exactly as during planning.
+    obs_g_imag, _ = render_goal(venv, cond, batch, actions.shape[1] * frameskip)
+    obs_g_reached, goal_offsets_reached = render_goal(venv, cond, batch, last_idx)
     with torch.no_grad():
-        z_g = encode_obs_np(wm, pre, batch["obs_g"], device)
         from utils import move_to_device
 
+        # what the planner believed: latent cost of its own imagined rollout
+        z_g = encode_obs_np(wm, pre, obs_g_imag, device)
         trans_obs_0 = move_to_device(pre.transform_obs(batch["obs_0"]), device)
         i_z_obses, _ = wm.rollout(obs_0=trans_obs_0, act=actions.detach())
         z_last = slice_trajdict_with_t(i_z_obses, start_idx=-1, end_idx=None)
         latent_cost = objective_fn(z_last, z_g).detach().cpu().numpy()
         # cost the *actually reached* observation would score (prediction-free)
+        z_g_reached = encode_obs_np(wm, pre, obs_g_reached, device)
         z_reached = encode_obs_np(
             wm,
             pre,
@@ -380,7 +564,7 @@ def run_plan_phase(ctx, cond, ep_ids):
              for k, v in e_obses.items()},
             device,
         )
-        latent_cost_reached = objective_fn(z_reached, z_g).detach().cpu().numpy()
+        latent_cost_reached = objective_fn(z_reached, z_g_reached).detach().cpu().numpy()
 
     init_dists = np.linalg.norm(
         np.asarray(batch["state_0"])[:, 4:6] - np.asarray(batch["state_0"])[:, 6:8],
@@ -410,12 +594,10 @@ def run_plan_phase(ctx, cond, ep_ids):
                 ),
                 "plan_seconds_batch": round(plan_seconds, 2),
                 "bg": {
-                    "enabled": bgp["bg_enabled"],
-                    "split": bgp["bg_split"],
-                    "obs_video_idx": bgp["obs"]["bg_video_idx"],
-                    "obs_offset": bgp["obs"]["bg_frame_offset"],
-                    "goal_video_idx": bgp["goal"]["bg_video_idx"],
-                    "goal_offset": bgp["goal"]["bg_frame_offset"],
+                    **bg_record(bgp, goal_offsets_reached[i]),
+                    "goal_offset_per_mpc_iter": [
+                        offs[i] for offs in planner.goal_offsets
+                    ],
                 },
                 **ctx["provenance"],
             }
@@ -437,8 +619,10 @@ def run_rollout_phase(ctx, cond, ep_ids):
     frameskip, num_hist = ctx["frameskip"], ctx["num_hist"]
     H = args.rollout_horizon
 
+    # no goal is involved in this phase; goal_t only fixes what gets rendered
     batch = prepare_batch(
-        venv, cond, ep_ids, args.seed, ctx["n_videos"], args.mismatch_shift
+        venv, cond, ep_ids, args.seed, ctx["video_lens"], args.mismatch_frac,
+        goal_t=0,
     )
     n = len(ep_ids)
 
@@ -525,15 +709,18 @@ def run_latent_phase(ctx, cond, ep_ids):
     args, device = ctx["args"], ctx["device"]
     frameskip = ctx["frameskip"]
 
+    # the cost compares the observation after n_steps env steps, so the goal is
+    # rendered with the background of that step
+    n_steps = args.goal_H * frameskip
     batch = prepare_batch(
-        venv, cond, ep_ids, args.seed, ctx["n_videos"], args.mismatch_shift
+        venv, cond, ep_ids, args.seed, ctx["video_lens"], args.mismatch_frac,
+        goal_t=n_steps,
     )
     n = len(ep_ids)
     z_g = encode_obs_np(wm, pre, batch["obs_g"], device)
     objective_fn = ctx["objective_fn"]
 
     rs = np.random.RandomState(args.seed + 991)
-    n_steps = args.goal_H * frameskip
     records = []
 
     for k in range(args.latent_samples):
@@ -576,6 +763,7 @@ def run_latent_phase(ctx, cond, ep_ids):
                     "state_dist": float(
                         np.linalg.norm(st[:4] - batch["state_g"][i][:4])
                     ),
+                    "bg": bg_record(batch["bg_plans"][i], batch["goal_offsets"][i]),
                     **ctx["provenance"],
                 }
             )
@@ -635,8 +823,10 @@ def parse_args(argv=None):
 
     p.add_argument("--rollout_horizon", type=int, default=10)
     p.add_argument("--latent_samples", type=int, default=16)
-    p.add_argument("--mismatch_shift", type=int, default=25,
-                   help="T4: goal background frame offset minus observation offset")
+    p.add_argument("--mismatch_frac", type=float, default=0.5,
+                   help="T4: goal background is this fraction of the video length "
+                        "away from the observation's frame at cost time "
+                        "(0.5 = the farthest frame, since frames wrap)")
 
     p.add_argument("--save_videos", action="store_true", help="save rollout videos")
     p.add_argument("--keep_videos", default="failure", choices=["failure", "all", "none"])
@@ -695,6 +885,8 @@ def main(argv=None):
         "mpc_max_iter": OmegaConf.select(plan_cfg, "planner.max_iter"),
         "alpha": OmegaConf.select(plan_cfg, "objective.alpha"),
         "goal_H": args.goal_H,
+        "bg_protocol": BG_PROTOCOL,
+        "mismatch_frac": args.mismatch_frac,
     }
 
     for label, model_name in parse_models(args.models):
@@ -713,21 +905,23 @@ def main(argv=None):
                 },
                 dset_n_rollout=args.dset_n_rollout,
             )
-            # how many videos the split offers, so episode seeds can index them
+            # the split's videos and their lengths, so episode seeds can index
+            # them and T4 can size its shift to each video
             if spec["bg_enabled"]:
-                n_videos = len(
-                    build_background_sources(
+                video_lens = [
+                    len(src)
+                    for src in build_background_sources(
                         model_cfg.env.kwargs.get("bg_source", "davis"),
                         spec["bg_split"],
                         model_cfg.env.kwargs.get("davis_path", None),
                     )
-                )
-                if n_videos == 0:
+                ]
+                if not video_lens:
                     raise SystemExit(
                         f"No background videos for split '{spec['bg_split']}'."
                     )
             else:
-                n_videos = 1  # T1 shows no video at all
+                video_lens = [1]  # T1 shows no video at all
 
             ctx = {
                 "args": args,
@@ -743,7 +937,7 @@ def main(argv=None):
                 "action_dim": dset.action_dim,
                 "plan_cfg": plan_cfg,
                 "objective_fn": objective_fn,
-                "n_videos": n_videos,
+                "video_lens": video_lens,
                 "provenance": {**provenance, "model_epoch": "latest"},
                 "planner_log": results_dir / "planner" / f"{label}__{cond}.json",
             }
@@ -753,6 +947,8 @@ def main(argv=None):
                 out_path = (
                     results_dir / PHASE_SUBDIR[phase] / f"{label}__{cond}.jsonl"
                 )
+                if phase in GOAL_PHASES:
+                    check_protocol(out_path, args.mismatch_frac)
                 done = done_episodes(out_path)
                 todo = [ep for ep in range(args.n_episodes) if ep not in done]
                 if not todo:
