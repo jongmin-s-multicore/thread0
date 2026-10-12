@@ -284,6 +284,15 @@ class DistractingReacherWrapper:
     Changes take effect on the next prepare()/reset().
     """
 
+    # gym.make() (0.23.1) does `env.unwrapped.spec = spec` and then wraps the env
+    # in TimeLimit/OrderEnforcing; venv workers use `env.unwrapped` to set the
+    # background attributes. This class is not a gym.Env subclass, so provide both.
+    spec = None
+
+    @property
+    def unwrapped(self):
+        return self
+
     def __init__(
         self,
         difficulty="easy",
