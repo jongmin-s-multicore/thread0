@@ -11,3 +11,11 @@ wandb
 # large local assets at the repo root (anchored so source dirs like env/wall/data/ stay tracked)
 /data
 /checkpoints
+
+# distracting-reacher experiment artifacts
+/exp
+/results
+/setup_check
+.state
+# rclone credentials must never be committed
+rclone.conf
