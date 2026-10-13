@@ -843,6 +843,15 @@ def main(argv=None):
     if os.environ["MUJOCO_GL"] == "egl":
         os.environ.setdefault("MUJOCO_EGL_DEVICE_ID", str(args.gpu).split(",")[0])
 
+    # Env workers must be spawned, not forked. Where d4rl is installed,
+    # `import env` pulls in d4rl.kitchen -> dm_control, whose import initializes
+    # an EGL display in this process; a forked worker inherits it and
+    # eglCreateContext fails with EGL_BAD_ALLOC. env/venv.py starts its workers
+    # through multiprocessing's default context, so set that here.
+    import multiprocessing
+
+    multiprocessing.set_start_method("spawn", force=True)
+
     import hydra
     import torch
     from omegaconf import OmegaConf
