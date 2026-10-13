@@ -68,7 +68,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if (( SMOKE )); then
-  NUM_EPISODES=8; EPISODE_LEN=30; EPOCHS=2; BATCH_SIZE=8
+  # EPISODE_LEN must be >= 31: train.py's openloop_rollout needs a horizon of
+  # num_hist + 3 = 6 steps (x frameskip 5, + 1 frame) and retries forever on
+  # shorter episodes, so 30 frames hang at the end of epoch 1.
+  NUM_EPISODES=8; EPISODE_LEN=40; EPOCHS=2; BATCH_SIZE=8
   N_EVAL_EPISODES=2; EVAL_BATCH=2
   CEM_SAMPLES=24; CEM_ITERS=2; MPC_ITERS=1
   echo "[smoke] tiny settings: ${NUM_EPISODES}ep x ${EPISODE_LEN} frames, ${EPOCHS} epochs, ${N_EVAL_EPISODES} eval episodes/condition"
