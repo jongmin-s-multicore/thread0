@@ -6,7 +6,12 @@ eval_acwm_phys.py 와 eval_acwm_phys_quant.py 가 저장한 프레임만 읽는�
   grid_<set>_<group>.png          중앙값 에피소드의 Real / Model / Recon 을 스텝 순서로
 를 만든다. Push Sand 는 학습 입력(224x224 로 눌린 프레임)을 원래 가로세로비로 되돌려 보여 준다.
 
+--per_episode N 을 주면 위 대신 그룹마다 에피소드 N 개를 하나씩 따로 (Real | Model, --scale 배 확대) <out_dir>/episodes/ 에 쓴다:
+  <set>_<group>_<순위>_<에피소드>.mp4   순위는 전체 에피소드 LPIPS 가 낮은 쪽이 01. 그룹 안에서 분위가 고르게 퍼지도록 고른다.
+--groups 로 쓸 그룹을 고른다 (예: Stack Cube 는 success,fail — 방향 그룹과 겹치지 않게).
+
 usage: python repro/eval/render_acwm_phys.py <out_prefix> <out_dir> [--sets ind_test,ood_test] [--fps 3]
+       [--per_episode N] [--scale 2] [--groups g1,g2]
 """
 import os, json, argparse
 import numpy as np
@@ -22,10 +27,19 @@ def show(frame, env, label=None, scale=1):
     w = int(round(h * ASPECT.get(env, 1.0) / 2)) * 2
     im = cv2.resize(np.ascontiguousarray(frame), (w, h), interpolation=cv2.INTER_CUBIC)
     if label:
-        (tw, th), base = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        fs = 0.45 if scale == 1 else 0.6
+        (tw, th), base = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, fs, 1)
         cv2.rectangle(im, (0, 0), (tw + 8, th + base + 6), (0, 0, 0), -1)
-        cv2.putText(im, label, (4, th + 3), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(im, label, (4, th + 3), cv2.FONT_HERSHEY_SIMPLEX, fs, (255, 255, 255), 1, cv2.LINE_AA)
     return im
+
+
+def spread(order, n):
+    """n episodes of a group sorted by score, at evenly spaced quantiles (all of them if the group is smaller)"""
+    if len(order) <= n:
+        return [int(e) for e in order]
+    pos = np.unique(np.round((np.arange(n) + 0.5) / n * (len(order) - 1)).astype(int))
+    return [int(order[i]) for i in pos]
 
 
 def main():
@@ -33,6 +47,9 @@ def main():
     ap.add_argument("out_prefix"); ap.add_argument("out_dir")
     ap.add_argument("--sets", default="ind_test,ood_test")
     ap.add_argument("--fps", type=int, default=3)
+    ap.add_argument("--per_episode", type=int, default=0)
+    ap.add_argument("--scale", type=int, default=2)
+    ap.add_argument("--groups", default="")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     info = json.load(open(f"{args.out_prefix}.json"))
@@ -45,6 +62,20 @@ def main():
         groups = {k[6:]: z[k] for k in z.files if k.startswith("group_")}
         if len(groups) > 1 and name == "ood_test":
             groups.pop("all")  # the OoD groups are shown separately
+        if args.groups:
+            groups = {g: mem for g, mem in groups.items() if g in args.groups.split(",")}
+        if args.per_episode:
+            out = os.path.join(args.out_dir, "episodes")
+            os.makedirs(out, exist_ok=True)
+            for g, mem in groups.items():
+                eps = spread(mem[np.argsort(score[mem])], args.per_episode)
+                picks[f"{name}/{g}"] = [{"rank": r + 1, "episode": str(z["names"][e]), "lpips": float(score[e])} for r, e in enumerate(eps)]
+                for r, e in enumerate(eps):
+                    video = [np.concatenate([show(src[s][e, k], env, f"{s}  frame {k * f}", args.scale) for s in ("Real", "Model")], 1) for k in range(int(k_full[e]))]
+                    video = [video[0]] * 2 + video + [video[-1]] * (2 * args.fps)
+                    stem = os.path.splitext(str(z["names"][e]))[0]
+                    imageio.mimsave(os.path.join(out, f"{name}_{g}_{r + 1:02d}_{stem}.mp4"), video, fps=args.fps, macro_block_size=2)
+            continue
         for g, mem in groups.items():
             if len(mem) < 3:
                 continue
@@ -66,8 +97,9 @@ def main():
                 steps.append(int(k_full[e]) - 1)
             grid = np.concatenate([np.concatenate([show(src[s][e, k], env, f"{s}  frame {k * f}" if c == 0 else f"{k * f}") for c, k in enumerate(steps)], 1) for s in ("Real", "Model", "Recon")], 0)
             imageio.imwrite(os.path.join(args.out_dir, f"grid_{name}_{g}.png"), grid)
-    json.dump(picks, open(os.path.join(args.out_dir, "picks.json"), "w"), indent=1)
-    print("wrote", args.out_dir, "\n", json.dumps(picks, indent=1))
+    out = os.path.join(args.out_dir, "episodes") if args.per_episode else args.out_dir
+    json.dump(picks, open(os.path.join(out, "picks.json"), "w"), indent=1)
+    print("wrote", out, "\n", json.dumps(picks, indent=1))
 
 
 if __name__ == "__main__":
