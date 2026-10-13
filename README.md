@@ -1,24 +1,24 @@
-# thread0 — DINO-WM reproduction
+# DINO-WM on ACWM-Phys physics videos
 
-> **This is the `hanbin5/acwm-phys` branch**: [`hanbin5/local`](repro/LOCAL.md) (`main` plus memory/speed changes for two 24 GB GPUs and that environment's run records) plus the **ACWM-Phys experiments**: DINO-WM trained on Pour Water, Cloth Move, Push Sand and Stack Cube. Their results, videos and the steps to reproduce them are in [the next section](#acwm-phys-experiments-this-branch). The shared code and docs are on [main](https://github.com/jongmin-s-multicore/thread0/tree/main).
+> **Branch `hanbin5/acwm-phys` is one experiment:** we train the DINO-WM world model on four physics environments of the ACWM-Phys benchmark, **Pour Water** (fluid), **Cloth Move** (cloth), **Push Sand** (granular material) and **Stack Cube** (rigid pick-and-stack), and measure how well it predicts future frames from the first frame and the actions, inside and outside the training distribution.
 
-This is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
+- **Videos, real next to model:** [Pour Water](https://drive.google.com/drive/folders/1ejhY8cU0dFgsPEEExnReXy0_kTZ1yRkg) · [Cloth Move](https://drive.google.com/drive/folders/1zackVOkDErFJBOC7ylLhR44QV_rfAZkC) · [Push Sand](https://drive.google.com/drive/folders/1jPap3D5vxFnut8BHrOugjFDgN9xxZkIy) · [Stack Cube](https://drive.google.com/drive/folders/1r2SIYP-alTeVXvKPwAqPim6WAvd6t6IL) (Google Drive)
+- **Results:** [summary](#summary) and [tables](#acwm-phys-results) below
+- **Run it yourself:** [Reproduce the ACWM-Phys experiments](#reproduce-the-acwm-phys-experiments)
+- **Settings and data conventions** (Korean): [repro/SETTINGS.md](repro/SETTINGS.md) §7 (Pour Water) and §8 (the other three)
 
-- **Evaluation videos:** [Google Drive folder `dino-wm-videos`](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3), one sub-folder per experiment (listed below).
-- **Detailed results and discussion** (Korean): issues [#1](https://github.com/jongmin-s-multicore/thread0/issues/1) (PointMaze, PushT, Wall) and [#2](https://github.com/jongmin-s-multicore/thread0/issues/2) (Rope, Granular). Full numbers for the main results table are in the JSON comments of those issues. The additional runs reported below (PointMaze seeds 1 and 101, the original-code-path re-run, the Rope predictor-lr 5e-5 retrain, the Rope/Granular arm-video re-runs) are not in the issues yet; their run records are on the `hanbin5/local` branch (`repro/runs/`).
-- **Protocol** (models, data, hyper-parameters, evaluation, differences from upstream; Korean): [repro/SETTINGS.md](repro/SETTINGS.md). **How to run** (Korean): [repro/README.md](repro/README.md).
+The repository this branch lives in reproduces the planning benchmarks of the DINO-WM paper. That part is unchanged here and starts at [thread0 — DINO-WM reproduction](#thread0--dino-wm-reproduction) further down.
 
-## ACWM-Phys experiments (this branch)
+## Summary
 
 [ACWM-Phys](https://arxiv.org/abs/2605.08567) (Hugging Face dataset [`t1an/ACWM-Phys`](https://huggingface.co/datasets/t1an/ACWM-Phys)) is a benchmark of simulated physics videos with per-frame actions. Every environment has a training set, an in-distribution (InD) test set and an out-of-distribution (OoD) test set. It is not part of the DINO-WM paper. We trained DINO-WM on four of its environments (frozen DINOv2 ViT-S/14 features, ViT predictor, VQ-VAE decoder, all trained from scratch on each environment) and measured how well the world model predicts future frames from the first frame and the actions. The dataset comes without a simulator, goals or rewards, so there is no planning.
 
-**Summary.**
 - **In distribution the model predicts well and follows the actions.** Its one-step error in DINOv2 feature space is 0.17–0.46 of the error of copying the previous frame, and feeding it another episode's actions makes the rollout 1.7–3.1× worse. Averaged over an episode, the gripper and pusher positions in the rollout are 3–6 px from the real ones (224 px frames) while they move 30–38 px.
 - **Out of distribution, the amount of material is pulled to what training showed.** A cloth 2.5× larger than the training cloth shrinks to the training size within one episode: in the last frame the real cloth covers 4,475 pixels and the model's 1,836 (1,888 on InD episodes). A smaller cloth grows (real 404, model 1,129), a sand pile with twice the particles shrinks to the training size (real 3,886, model 1,843), and the poured water ends near the training mean whatever the real amount.
 - **Rare outcomes are pulled to the common one.** In Stack Cube, 27 % of the training episodes are failed stacks. On failed test episodes the model's last frame shows a stacked cube in 23–24 % of the episodes; the real last frame does in 8–12 %.
 - **The decoder is not the cause.** The decoder draws the OoD sizes and the failed stacks when it is given the features of the real frames (last column of the second table). The predicted features are what changes.
 
-### Environments, videos and result files
+## Environments, videos and result files
 
 | Environment (video folder) | What happens | OoD test set | Episodes: train / val · InD test · OoD test | Training |
 |---|---|---|---|---|
@@ -31,7 +31,7 @@ All models: 224 px input, frameskip 5 (the model predicts every 5th frame), pred
 
 Each video folder also holds the numbers behind the tables below: `<env>_h1f5.json` (prediction metrics with bootstrap intervals), `<env>_h1f5_quant.json` (physical quantities), `epoch_logs.jsonl` (training curves) and figures, in the `results/` sub-folder for [Cloth Move](https://drive.google.com/drive/folders/1Kr9HsFg_bmx7FZVMZQNSJRP6MPPDpAB0), [Push Sand](https://drive.google.com/drive/folders/16OXSzpN5lt7vD6LExBdFSZ1D3B48mP_E) and [Stack Cube](https://drive.google.com/drive/folders/1KSYUBFMk1HCRz-X8LrMkkN6ssosXx8bx) and next to the videos for Pour Water. Model weights are not uploaded.
 
-### Results
+## ACWM-Phys results
 
 Prediction quality of the num_hist 1 models. *Copy* predicts that nothing changes. *Decoder ceiling* is the real target frame passed through the encoder and decoder, the best the decoder can do. *Skill* is the share of the gap between copying (through the decoder) and the decoder ceiling that the model closes: 0 is as good as copying, 1 is the decoder ceiling. Rollouts are open loop over 37-frame windows (7 predicted frames at frameskip 5), 10 windows per episode. LPIPS: lower is better.
 
@@ -73,14 +73,14 @@ Limits of these numbers:
 - The colour masks are checked against the decoder on real frames: on InD episodes the masks overlap with IoU 0.92 (cloth) and 0.95 (sand) and the areas agree within 2–3 %. For Push Sand OoD the decoder itself draws 17 % less sand than the real frame, so part of that row's gap is the decoder.
 - The "stacked" test is an image rule (yellow cube centre right above the green one). On real frames it agrees with the dataset's success flag in 98.8 % of the training episodes; that is why failed stacks show 8–12 % in the Real column.
 
-### How to read these videos
+## How to read the ACWM-Phys videos
 
 - Left panel **Real**: the dataset video. Right panel **Model**: the world model's rollout from the first frame and all actions of the episode, decoded to pixels. Both show every 5th frame at 3 fps and hold the last frame for 2 s. Push Sand is trained on frames squeezed to 224 × 224; the videos stretch them back.
 - `<set>_<group>_<rank>_<episode>.mp4`: one episode. Ten episodes per group, picked at evenly spaced quantiles of the whole-episode LPIPS, so rank `01` is the best-predicted one and `10` the worst. Groups: `ind_test_all`, `ood_test_smaller` and `ood_test_larger` for Cloth Move; `ind_test_all` and `ood_test_all` for Push Sand; `{ind,ood}_test_{success,fail}` for Stack Cube.
 - `qual_<set>_<group>.mp4`: three episodes of a group in one video (10 %, 50 % and 90 % quantiles), top to bottom.
 - Pour Water: `qual_{ind_test,ood_low,ood_high}.mp4` show ground truth, model A (num_hist 3) and model B (num_hist 1) side by side for one episode each.
 
-### Reproduce
+## Reproduce the ACWM-Phys experiments
 
 **Requirements.** The same as in [Running it](#running-it), without docker and without the OSF data: an NVIDIA driver, `git curl bzip2 unzip zip gcc`, and `libglew-dev libgl1-mesa-dev`. These experiments never call MuJoCo, but the code imports mujoco-py, so `install_env.sh` has to build it. Disk space in the work root `$DINO_WORK`: Python env 9 GB plus about 4 GB of pip downloads, dataset 2.6 GB, and for the outputs about 5 GB of checkpoints and 2 GB of result files for Cloth Move, Push Sand and Stack Cube, and 5 GB of checkpoints for Pour Water. On an RTX 3090 one training run takes about 7 h (Pour Water model A 16 h) and its evaluation 25–60 min.
 
@@ -137,6 +137,18 @@ python repro/eval/tables_acwm_phys.py $DINO_WORK/results
 - Pour Water's water-amount analysis and figures are separate scripts (`repro/eval/eval_pour_water_volume.py`, `plot_pour_water.py`, `render_pour_water.py`; usage in each file).
 - The data checks behind the conventions in SETTINGS.md §8 (which action drives which frame, the Push Sand action encoding, the frameskip) are in [`repro/setup/checks/acwm_phys/`](repro/setup/checks/acwm_phys/README.md). They are not needed to reproduce the results.
 - Run records (what each run was): `repro/runs/{train,eval}/dinowm_{pourwater,clothmove,pushsand,stackcube}-*/run.yaml`.
+
+---
+
+# thread0 — DINO-WM reproduction
+
+> **Shared part of the repository.** Everything from here on is the DINO-WM benchmark reproduction as on [`hanbin5/local`](repro/LOCAL.md): `main` plus memory/speed changes for two 24 GB GPUs and the run records of this environment (`repro/runs/`). The shared code and docs are on [main](https://github.com/jongmin-s-multicore/thread0/tree/main).
+
+This is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
+
+- **Evaluation videos:** [Google Drive folder `dino-wm-videos`](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3), one sub-folder per experiment (listed below).
+- **Detailed results and discussion** (Korean): issues [#1](https://github.com/jongmin-s-multicore/thread0/issues/1) (PointMaze, PushT, Wall) and [#2](https://github.com/jongmin-s-multicore/thread0/issues/2) (Rope, Granular). Full numbers for the main results table are in the JSON comments of those issues. The additional runs reported below (PointMaze seeds 1 and 101, the original-code-path re-run, the Rope predictor-lr 5e-5 retrain, the Rope/Granular arm-video re-runs) are not in the issues yet; their run records are on the `hanbin5/local` branch (`repro/runs/`).
+- **Protocol** (models, data, hyper-parameters, evaluation, differences from upstream; Korean): [repro/SETTINGS.md](repro/SETTINGS.md). **How to run** (Korean): [repro/README.md](repro/README.md).
 
 ## Results
 
