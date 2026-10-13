@@ -1,26 +1,27 @@
-"""Prediction under camera motion: latent errors of several world models on the same frames.
+"""Evaluate latent prediction error of several world models under camera motion.
 
-Evaluation frames come from scripts/render_camera_data.py --episodes val --counterfactual
-(one folder per condition). The visual latent is the frozen DINOv2 encoder's output, the same
-for every model, so the targets are encoded once per condition and every model is scored
-against them. For every validation episode and every step t (context ends at frame t):
+Evaluation frames are rendered by scripts/render_camera_data.py --episodes val --counterfactual,
+one folder per condition. The visual latent is the output of the frozen DINOv2 encoder, which
+is the same for all models. Targets are encoded once per condition. For each validation
+episode and each step t (the context ends at frame t):
 
-  err_true     MSE(pred, z[state t+1, camera t+1])   the real next observation
-  err_copy     MSE(z[frame t], z[state t+1, camera t+1])   "nothing changes" baseline
-  err_camonly  MSE(pred, z[state t,   camera t+1])   camera moved, object did not
-  err_objonly  MSE(pred, z[state t+1, camera t])     object moved, camera did not
-  open_h<k>    open-loop error k steps ahead (k = 1..horizon), with its copy baseline
+  err_true     MSE(pred, z[state t+1, camera t+1])         actual next frame
+  err_copy     MSE(z[frame t], z[state t+1, camera t+1])   current frame used as prediction
+  err_camonly  MSE(pred, z[state t,   camera t+1])         camera moved, object unchanged
+  err_objonly  MSE(pred, z[state t+1, camera t])           object moved, camera unchanged
+  open_h<k>    open-loop error k steps ahead (k = 1..horizon)
 
-Models with num_hist = 2 need two context frames, so all numbers use t >= 1 only: every
-model is scored on the same (episode, t) pairs.
+Models with num_hist = 2 need two context frames. All metrics use t >= 1 so that all models
+are evaluated on the same (episode, t) pairs.
 
     python scripts/eval_camera_pred.py --object rope \\
         --models fixed=train_rope@50 told=cam_rope_move_told_h1@50 \\
         --conds eval_fixed eval_static_rand eval_move eval_move_fast --out results.json
 
-A model is <label>=<name>@<epoch>: $DINO_TRAIN/outputs/<name>/{hydra.yaml,checkpoints/model_<epoch>.pth}.
---decoder <name>@<epoch> adds LPIPS/SSIM of the decoded 1-step prediction, using that one
-decoder for every model.
+Model format: <label>=<name>@<epoch>, read from
+$DINO_TRAIN/outputs/<name>/{hydra.yaml,checkpoints/model_<epoch>.pth}.
+--decoder <name>@<epoch> adds LPIPS/SSIM of the decoded 1-step prediction. The same decoder
+is used for all models.
 """
 
 import argparse
@@ -63,7 +64,7 @@ def mse(a, b):
 
 
 class Model:
-    """A trained world model plus the action normalization of the data it was trained on."""
+    """World model with the action normalization statistics of its training data."""
 
     def __init__(self, spec, obj, data_root, ckpt_base):
         self.label, rest = spec.split("=", 1)
@@ -76,9 +77,8 @@ class Model:
         ds = cfg.env.dataset
         self.cam_action = bool(ds.get("cam_action", False))
         self.train_variant = ds.get("variant", "fixed")
-        # Action statistics as the model saw them. The push statistics are the same for every
-        # variant (same actions); a model trained on the original dataset is given those of
-        # the `move` set, which are computed from the same numbers.
+        # Action statistics of the training data. Push statistics are the same for all
+        # variants. For a model trained on the original dataset, the `move` set is used.
         stats = DeformCamDataset(
             data_path=data_root, object_name=obj, normalize_action=True, cam_action=self.cam_action,
             variant=self.train_variant if self.train_variant != "fixed" else "move",
@@ -92,7 +92,7 @@ class Model:
         self.cfg = cfg
 
     def actions(self, push, pose):
-        """(N, T, 4) raw push actions and (N, T, 3) poses -> normalized model actions."""
+        """Normalize (N, T, 4) push actions and (N, T, 3) poses into model actions."""
         a = torch.from_numpy(push).float()
         if self.cam_action:
             p = torch.from_numpy(pose).float()
@@ -104,7 +104,7 @@ class Model:
 
     @torch.no_grad()
     def predict(self, frames, act, t, k):
-        """Open-loop latents for steps t+1..t+k given context ending at frame t (one episode).
+        """Open-loop latents for steps t+1..t+k, context ending at frame t, for one episode.
 
         frames (T, 3, H, W) normalized, act (T, A), t a list of ints. Returns (len(t), k, P, D)
         visual latents and the matching proprio latents.
@@ -147,7 +147,7 @@ def main():
 
         dec = Model("decoder=" + args.decoder, args.object, data_root, ckpt_base).wm
         assert dec.decoder is not None, "the --decoder model has no decoder"
-    enc = models[0].wm  # frozen DINOv2: identical in every model
+    enc = models[0].wm  # frozen DINOv2, same for all models
 
     def to_model(x):  # (n, H, W, 3) uint8 -> normalized (n, 3, H, W) on the GPU
         x = torch.from_numpy(np.ascontiguousarray(x)).permute(0, 3, 1, 2).float() / 255.0
@@ -178,7 +178,7 @@ def main():
 
         ts = list(range(1, T - 1))            # 1-step: context ends at t, target t+1
         ts_open = list(range(1, T - K))       # open loop needs K future frames
-        torch.set_grad_enabled(False)          # nothing below is trained (decoder and LPIPS included)
+        torch.set_grad_enabled(False)          # evaluation only
         for i in range(N):
             F = to_model(c["frames"][i])
             zF = encode(F)
@@ -186,8 +186,8 @@ def main():
             zO = encode(to_model(c["objonly"][i]))   # index t: state t+1, camera t
             tgt = zF[[t + 1 for t in ts]]
             add(ref, "err_copy", mse(zF[ts], tgt))
-            add(ref, "true_vs_camonly", mse(tgt, zC[ts]))   # what the object's motion changes
-            add(ref, "true_vs_objonly", mse(tgt, zO[ts]))   # what the camera's motion changes
+            add(ref, "true_vs_camonly", mse(tgt, zC[ts]))   # change due to object motion
+            add(ref, "true_vs_objonly", mse(tgt, zO[ts]))   # change due to camera motion
             for k in range(1, K + 1):
                 add(ref, f"open_copy_h{k}", mse(zF[ts_open], zF[[t + k for t in ts_open]]))
             for m in models:

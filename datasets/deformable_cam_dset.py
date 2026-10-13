@@ -1,15 +1,12 @@
-"""Rope/Granular frames re-rendered from another camera (scripts/render_camera_data.py).
+"""Dataset for Rope/Granular frames re-rendered with a different camera.
 
-Trajectories and push actions are the ones of datasets/deformable_env_dset.py; only the pixels
-differ. The train/val split is the same too (same episode order, same seed), so a model
-trained here is validated on the episodes the fixed-camera models were validated on.
+The frames are produced by scripts/render_camera_data.py. Trajectories, push actions and the
+train/val split are the same as in datasets/deformable_env_dset.py.
 
-With cam_action=True the per-step camera motion, pose[t+1] - pose[t] as (azimuth, height,
-radius), is appended to the push action: the model is told how the camera moves. With False
-it gets the push only and has to work the camera motion out from its context frames.
+cam_action=True appends the camera motion pose[t+1] - pose[t] (azimuth, height, radius) to
+the push action. cam_action=False uses the push action only.
 
-Particle states are not loaded (4 GB for Granular and not needed to train): `state` is a
-dummy zero, as `proprio` already is for these environments.
+Particle states are not loaded. `state` is a zero placeholder, like `proprio`.
 """
 
 from pathlib import Path
@@ -38,14 +35,14 @@ class DeformCamDataset(TrajDataset):
         self.normalize_action = normalize_action
         self.cam_action = cam_action
 
-        # (N, T, H, W, 3) uint8; memory-mapped, so dataloader workers share the page cache
+        # (N, T, H, W, 3) uint8, memory-mapped
         self.frames = np.load(self.data_path / "frames.npy", mmap_mode="r")
         self.actions = torch.from_numpy(np.load(self.data_path / "actions.npy")).float()
         if cam_action:
             pose = torch.from_numpy(np.load(self.data_path / "cam_pose.npy")).float()
             delta = torch.zeros_like(pose)
             delta[:, :-1] = pose[:, 1:] - pose[:, :-1]
-            # the step after the last frame was not rendered; the camera keeps its velocity
+            # no frame after the last step: reuse the previous delta
             delta[:, -1] = delta[:, -2]
             self.actions = torch.cat([self.actions, delta], dim=-1)
 
@@ -56,9 +53,9 @@ class DeformCamDataset(TrajDataset):
         self.action_dim = self.actions.shape[-1]
         self.seq_lengths = torch.tensor([n_steps] * n)
 
-        self.states = torch.zeros((n, n_steps, 1))  # dummy
+        self.states = torch.zeros((n, n_steps, 1))  # placeholder
         self.state_dim = 1
-        self.proprios = torch.zeros((n, n_steps, 1))  # dummy, as in DeformDataset
+        self.proprios = torch.zeros((n, n_steps, 1))  # placeholder, as in DeformDataset
         self.proprio_dim = 1
 
         if normalize_action:
@@ -101,10 +98,10 @@ class DeformCamDataset(TrajDataset):
 
 
 class CamSlicerDataset(TrajSlicerDataset):
-    """TrajSlicerDataset that reads only the frames of the window.
+    """TrajSlicerDataset that loads only the frames of the window.
 
-    The stock __getitem__ loads the whole trajectory and then slices it. The samples are the
-    same; this one just does not decode the frames it throws away.
+    TrajSlicerDataset.__getitem__ loads the full trajectory before slicing. This class
+    returns the same samples.
     """
 
     def __getitem__(self, idx):

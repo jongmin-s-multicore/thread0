@@ -1,4 +1,4 @@
-# Rope/Granular re-rendered from another camera (scripts/render_camera_data.py).
+# Rope/Granular re-rendered with a different camera (scripts/render_camera_data.py).
 #   variant:    fixed | static_rand | move | move_fast  (env/deformable_env/camera_motion.py)
 #   cam_action: append the per-step camera motion to the push action (action_dim 4 -> 7)
 #

@@ -1,38 +1,74 @@
-# thread0 — DINO-WM with a moving camera (Rope, Granular)
+# DINO-WM with a moving camera (Rope, Granular)
 
-> **This is the `hanbin5/occlusion` branch: the moving-camera experiment.** DINO-WM predicts in the feature space of a frozen DINOv2 encoder. This experiment asks whether it can still predict the next observation when the camera's 3-D pose moves during a Rope or Granular episode. The branch is [`hanbin5/local`](repro/LOCAL.md) (`main` plus memory/speed changes for two 24 GB GPUs) plus this experiment; the benchmark reproduction below the first section is unchanged.
+Branch `hanbin5/occlusion`, based on [`hanbin5/local`](repro/LOCAL.md).
 
-## The moving-camera experiment (this branch)
+This branch measures the next-frame prediction error of DINO-WM on Rope and Granular when the camera moves during an episode.
 
-![The same Rope and Granular states from the dataset camera and from a moving camera](assets/occlusion_moving_camera.png)
+![Rope and Granular episodes rendered from the dataset camera and from a moving camera](assets/occlusion_moving_camera.png)
 
-The same episode seen from the dataset's fixed camera and from a camera that moves during the episode (here it turns 127° around the table while rising and moving closer). Rows 1–2 show the same rope states, rows 3–4 the same particle states; only the camera differs.
+Rows 1 and 3 are rendered from the dataset camera. Rows 2 and 4 are the same episodes rendered from a moving camera. In this example the camera rotates 127° around the table.
 
-- **What changes in the image.** The camera's pose: it turns around the table and changes height and distance, at a constant speed within an episode.
-- **What is tested.** Prediction. Does the model predict the next observation when the viewpoint moves, and does the prediction contain both the camera's motion and the object's motion?
-- **Data.** The stored particle states of the paper's Rope and Granular datasets (NVIDIA FleX) are re-rendered from other camera poses, without re-simulating, so every variant has exactly the dataset's states, actions and train/validation split. Re-rendering from the dataset camera reproduces the shipped frames to 0.13 / 255 (Rope).
-- **Models.** Five per object: the fixed-camera model of the reproduction; one trained on random static viewpoints; and three trained with a moving camera — the camera motion not given with 1 context frame, not given with 2 context frames, and given as part of the action.
-- **Evaluation.** Four camera conditions (dataset camera, random static viewpoint, moving, moving faster than in training). The error to the real next frame is compared with the error to two counterfactual frames: "only the camera moved" and "only the object moved".
-- **Status (2026-10-13).** Data rendered. The existing fixed-camera models have been measured without retraining (below). The eight new models are training.
-- **Read.** [PLAN_camera_motion.md](PLAN_camera_motion.md) (Korean: questions, data, models, metrics).
-- **Code.** `env/deformable_env/camera_motion.py` (camera poses and trajectories), `scripts/render_camera_data.py` (re-rendering), `datasets/deformable_cam_dset.py` and `conf/env/deformable_cam.yaml` (training), `scripts/eval_camera_pred.py` (evaluation).
+## Setup
 
-**First measurement (no retraining).** The Rope and Granular models of the reproduction were trained with one fixed camera. Their one-step prediction error in DINOv2 feature space, on 40 validation episodes, next to the error of simply copying the current frame:
+| Item | Description |
+|---|---|
+| Environments | Rope, Granular (NVIDIA FleX) |
+| Camera motion | Rotation around the table with changes in height and distance. The velocity is constant within an episode. |
+| Data | The dataset stores the particle positions of every frame. Frames are re-rendered from these positions with a different camera. States, actions and the train/validation split are the same as in the original dataset. |
+| Metric | MSE between the predicted and the actual DINOv2 features of the next frame |
+| Status (2026-10-13) | Data rendered. 8 models in training. |
+| Details | [PLAN_camera_motion.md](PLAN_camera_motion.md) (Korean) |
 
-| Camera at test time | Rope: prediction / copy | Granular: prediction / copy |
-|---|---|---|
-| The dataset camera | 0.077 / 0.390 | 0.145 / 0.307 |
-| Static, turned 5° around the table | 0.939 / 0.387 | 0.632 / 0.297 |
-| Static, turned 45° | 2.106 / 0.303 | 1.322 / 0.275 |
-| Moving, 2° per step | 1.578 / 0.837 | 1.152 / 0.770 |
+Models, per object:
 
-A viewpoint 5° away from the training camera is enough to make the prediction worse than copying the current frame: these models do not generalize over viewpoint at all. The full table is in [PLAN_camera_motion.md §3](PLAN_camera_motion.md). Results of the newly trained models will be posted as an issue.
+| Name | Training camera | Camera motion given as input | Context frames |
+|---|---|---|---|
+| `fixed` | dataset camera | - | 1 |
+| `static` | random pose per episode, no motion | no | 1 |
+| `move-blind-h1` | moving | no | 1 |
+| `move-blind-h2` | moving | no | 2 |
+| `move-told-h1` | moving | yes, appended to the action | 1 |
 
-**Where the branch started.** It started from the code of the Distracting Reacher experiment of [thread1 `occlusion0`](https://github.com/jongmin-s-multicore/thread1/tree/occlusion0) (by davidjk522: a DeepMind Control Reacher with a video playing in the background), which is merged into this branch. That is why its files are in this tree ([README_experiment.md](README_experiment.md), [CLAUDE.md](CLAUDE.md), `env/distracting_reacher.py`, `scripts/{collect_data,eval,analyze}.py`, `scripts/run_all.sh`). It is thread1's experiment, not one of this branch.
+`fixed` is the model from the reproduction. The other four are trained on this branch.
+
+Test cameras:
+
+| Name | Camera |
+|---|---|
+| E-fixed | dataset camera |
+| E-static | random pose per episode, no motion |
+| E-move | moving, 2 to 8° per step |
+| E-move-fast | moving, 10 to 15° per step |
+
+## Preliminary result
+
+Existing `fixed` models without retraining, 40 validation episodes. "Copy" is the error when the current frame is used as the prediction.
+
+| Test camera | Rope prediction | Rope copy | Granular prediction | Granular copy |
+|---|---|---|---|---|
+| Dataset camera | 0.077 | 0.390 | 0.145 | 0.307 |
+| Static, rotated 5° | 0.939 | 0.387 | 0.632 | 0.297 |
+| Static, rotated 45° | 2.106 | 0.303 | 1.322 | 0.275 |
+| Moving, 2° per step | 1.578 | 0.837 | 1.152 | 0.770 |
+
+With the camera rotated by 5°, the prediction error is larger than the copy error for both objects. The full table is in [PLAN_camera_motion.md](PLAN_camera_motion.md), section 3. Results of the trained models will be posted as an issue.
+
+## Code
+
+| File | Purpose |
+|---|---|
+| `env/deformable_env/camera_motion.py` | camera pose and trajectories |
+| `scripts/render_camera_data.py` | re-rendering |
+| `datasets/deformable_cam_dset.py`, `conf/env/deformable_cam.yaml` | dataset and config for training |
+| `scripts/eval_camera_pred.py` | evaluation |
+
+## Other files on this branch
+
+The branch includes the Distracting Reacher code from [thread1 `occlusion0`](https://github.com/jongmin-s-multicore/thread1/tree/occlusion0) by davidjk522. It was merged before this experiment started. The files are `README_experiment.md`, `CLAUDE.md`, `env/distracting_reacher.py`, `scripts/collect_data.py`, `scripts/eval.py`, `scripts/analyze.py` and `scripts/run_all.sh`. Distracting Reacher is a thread1 experiment. It is not part of the experiment on this branch.
 
 ---
 
-# DINO-WM reproduction (unchanged from `hanbin5/local`)
+# DINO-WM reproduction (same as `hanbin5/local`)
 
 This is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
 

@@ -68,9 +68,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if (( SMOKE )); then
-  # EPISODE_LEN must be >= 31: train.py's openloop_rollout needs a horizon of
-  # num_hist + 3 = 6 steps (x frameskip 5, + 1 frame) and retries forever on
-  # shorter episodes, so 30 frames hang at the end of epoch 1.
+  # EPISODE_LEN must be >= 31. train.py's openloop_rollout needs a horizon of
+  # num_hist + 3 = 6 steps (x frameskip 5, + 1 frame). With shorter episodes it
+  # does not terminate.
   NUM_EPISODES=8; EPISODE_LEN=40; EPOCHS=2; BATCH_SIZE=8
   N_EVAL_EPISODES=2; EVAL_BATCH=2
   CEM_SAMPLES=24; CEM_ITERS=2; MPC_ITERS=1
@@ -177,9 +177,8 @@ if is_done train; then
   log "stage 'train' already done -> skipping"
 else
   log "training models A (clean) and B (distract) on GPUs [$GPU_LIST]"
-  # bg_source is recorded in each model's hydra.yaml, which is where eval.py
-  # reads the background source for T2-T4; without it a `--bg_source synthetic`
-  # run would collect synthetic data and then evaluate on DAVIS.
+  # eval.py reads the background source for T2-T4 from each model's hydra.yaml
+  # (env.kwargs.bg_source). Pass --bg_source to training so that it is recorded.
   # TRAIN_EXTRA is intentionally unquoted: it carries several hydra overrides
   timed train bash scripts/train.sh \
     --gpus "$GPU_LIST" --epochs "$EPOCHS" --batch_size "$BATCH_SIZE" \

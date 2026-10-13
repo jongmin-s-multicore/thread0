@@ -1,10 +1,9 @@
-"""Re-render the Rope/Granular dataset from another camera, without re-simulating.
+"""Re-render the Rope/Granular dataset with a different camera.
 
-The DINO-WM deformable dataset stores the particle positions of every frame (states.pth) and
-the arm is parked at its home pose whenever a frame is saved, so a stored state plus a camera
-pose determines the image. This script sets each stored state in PyFleX and renders it from
-the pose given by env/deformable_env/camera_motion.py. States and actions are therefore
-exactly the dataset's; the variants differ in pixels only.
+The dataset stores the particle positions of every frame (states.pth). The robot arm is at
+its home pose in every saved frame. This script sets the stored positions in PyFleX and
+renders each frame with the camera pose from env/deformable_env/camera_motion.py. The
+simulation is not re-run. States and actions are the same as in the dataset.
 
     python scripts/render_camera_data.py --object rope --variant move
     python scripts/render_camera_data.py --object rope --variant move_fast --episodes val --counterfactual
@@ -15,11 +14,11 @@ Output: $DATASET_DIR/deformable_cam/<object>/<variant>/
     actions.npy   (N, T, 4) float32, copied from the dataset (unnormalized)
     episodes.npy  (N,) dataset episode index of each row
     meta.json
-  with --counterfactual also (for telling camera motion from object motion at evaluation):
-    frames_camonly.npy  (N, T-1, ...) state t   seen from the camera of step t+1
-    frames_objonly.npy  (N, T-1, ...) state t+1 seen from the camera of step t
+  with --counterfactual:
+    frames_camonly.npy  (N, T-1, ...) state t   rendered with the camera of step t+1
+    frames_objonly.npy  (N, T-1, ...) state t+1 rendered with the camera of step t
 
-Needs PyFleX (source repro/env.sh); runs at roughly 20-35 ms per frame.
+Requires PyFleX (source repro/env.sh). Rendering takes about 20-35 ms per frame.
 """
 
 import argparse
@@ -39,7 +38,7 @@ from env.deformable_env import camera_motion as cm  # noqa: E402
 
 
 def val_episodes(n, split_ratio=0.9, seed=42):
-    """The validation trajectories of datasets.traj_dset.split_traj_datasets."""
+    """Validation episode indices, same split as datasets.traj_dset.split_traj_datasets."""
     import torch
 
     perm = torch.randperm(n, generator=torch.Generator().manual_seed(seed)).tolist()
@@ -121,7 +120,7 @@ def main():
             print(f"[render] {i + 1}/{N} episodes  {el:6.0f}s  eta {el / (i + 1) * (N - i - 1):5.0f}s", flush=True)
     frames.flush()
 
-    # how close is a re-render from the dataset camera to the frames the dataset ships?
+    # difference between frames re-rendered with the dataset camera and the dataset frames
     fixed_check = None
     if args.variant == "fixed":
         diffs = []
