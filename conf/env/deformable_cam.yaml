@@ -1,0 +1,28 @@
+# Rope/Granular re-rendered from another camera (scripts/render_camera_data.py).
+#   variant:    fixed | static_rand | move | move_fast  (env/deformable_env/camera_motion.py)
+#   cam_action: append the per-step camera motion to the push action (action_dim 4 -> 7)
+#
+#   python train.py env=deformable_cam env.dataset.object_name=rope env.kwargs.object_name=rope \
+#       env.dataset.variant=move env.dataset.cam_action=true frameskip=1 num_hist=1
+name: deformable_env
+args: []
+kwargs:
+  object_name: "rope"
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.deformable_cam_dset.load_deformable_cam_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/deformable_cam
+  object_name: "rope"
+  variant: "move"
+  cam_action: false
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform"
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 16
