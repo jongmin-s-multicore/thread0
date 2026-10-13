@@ -82,35 +82,61 @@ Limits of these numbers:
 
 ### Reproduce
 
-The num_hist 1 runs use 7.1 GB of GPU memory, Pour Water model A (num_hist 3) uses 19.8 GB. On an RTX 3090 one training run takes about 7 h (Pour Water A 16 h) and its evaluation 25–60 min.
+**Requirements.** The same as in [Running it](#running-it), without docker and without the OSF data: an NVIDIA driver, `git curl bzip2 unzip zip gcc`, and `libglew-dev libgl1-mesa-dev`. These experiments never call MuJoCo, but the code imports mujoco-py, so `install_env.sh` has to build it. Disk space in the work root `$DINO_WORK`: Python env 9 GB plus about 4 GB of pip downloads, dataset 2.6 GB, and for the outputs about 5 GB of checkpoints and 2 GB of result files for Cloth Move, Push Sand and Stack Cube, and 5 GB of checkpoints for Pour Water. On an RTX 3090 one training run takes about 7 h (Pour Water model A 16 h) and its evaluation 25–60 min.
+
+**GPU memory by training setting.** Peak memory of the training process (`nvidia-smi`) at 224 px input. It depends on `num_hist` (frames per sample) and `training.batch_size`; `frameskip` does not change the number of frames per sample. To fit a smaller GPU, lower `training.batch_size` in the job list.
+
+| `num_hist` | `training.batch_size` | Peak GPU memory | Used for |
+|---|---|---|---|
+| 1 | 24 | 7.1 GB | Cloth Move, Push Sand, Stack Cube, Pour Water model B |
+| 3 | 24 | 19.8 GB | Pour Water model A |
+| 3 | 32 (the paper's batch size) | more than 24 GB (out of memory on a 24 GB GPU) | not used |
+
+Everything needed is in this repo and in the public dataset; nothing is read from outside the clone and `$DINO_WORK`. As in [Running it](#running-it), the code blocks contain no `#` comments and work in bash and zsh, from the repo root.
+
+**Install and data.** `install_env.sh` creates the Python env under `$DINO_WORK` (any path outside the repo; `~/dinowm` is the default). `source repro/env.sh` sets the paths and puts the env's `python` first on `PATH`; run it in every new shell. The download script fetches the four environments from Hugging Face at a pinned dataset commit into `$DINO_WORK/data/acwm_phys` and checks the number of episodes of every split. If the Hub rate-limits the download it waits and retries; files already on disk are skipped.
 
 ```bash
-git clone -b hanbin5/acwm-phys https://github.com/jongmin-s-multicore/thread0.git && cd thread0
-export DINO_WORK=~/dinowm                    # work root outside the repo (env, data, models, results)
-bash repro/setup/install_env.sh              # micromamba env (Python 3.9); PyFleX and the OSF data are not needed
-source repro/env.sh                          # in every new shell, from the repo root
-python repro/setup/download_acwm_phys.py     # the four environments at a pinned dataset commit, 2.6 GB, checks the episode counts
-
-# One job list at a time: wait for "QUEUE EMPTY" in the log before starting the next list
-# (start.sh replaces the running scheduler; jobs that were still waiting in the old list would not start).
-bash repro/queue/start.sh repro/jobs/acwm_phys_pilot.txt   # optional: 60 episodes, 3 epochs, a few minutes per environment
-bash repro/queue/start.sh repro/jobs/acwm_phys.txt         # Cloth Move, Push Sand, Stack Cube: train, evaluate, measure, render
-bash repro/queue/start.sh repro/jobs/pour_water.txt        # Pour Water models A and B and their evaluation
-tail -f $DINO_WORK/runs/scheduler.log
-
-# after the queue: per-episode videos and the area figure (read the saved frames, no GPU)
-R=$DINO_WORK/results/acwm_phys
-python repro/eval/render_acwm_phys.py $R/cloth_h1f5 $R/figs/cloth_h1f5 --per_episode 10
-python repro/eval/render_acwm_phys.py $R/sand_h1f5  $R/figs/sand_h1f5  --per_episode 10
-python repro/eval/render_acwm_phys.py $R/stack_h1f5 $R/figs/stack_h1f5 --per_episode 10 --groups success,fail
-python repro/eval/plot_acwm_phys.py $R $R/figs/fig_area_cloth_sand.png
+git clone -b hanbin5/acwm-phys https://github.com/jongmin-s-multicore/thread0.git
+cd thread0
+export DINO_WORK=~/dinowm
+bash repro/setup/install_env.sh
+source repro/env.sh
+python repro/setup/download_acwm_phys.py
 ```
 
-- The queue starts one job per GPU by default and runs each evaluation after its training job. On a single GPU `acwm_phys.txt` takes about a day.
-- Outputs: models in `$DINO_WORK/train_runs/outputs/train_<job>/`, logs in `$DINO_WORK/runs/`, results in `$DINO_WORK/results/acwm_phys/` (`<env>_h1f5.json`, `<env>_h1f5_quant.json`, videos under `figs/`) and `$DINO_WORK/results/pour_water/`. Compare the JSON files with the ones in the Drive folders above; the README tables come from those files.
+**Pilot (optional).** 60 episodes and 3 epochs per environment, a few minutes each. It shows that training, validation and checkpointing work before the long runs.
+
+```bash
+bash repro/queue/start.sh repro/jobs/acwm_phys_pilot.txt
+```
+
+**Full runs.** The job queue runs in the background and starts one job per GPU; its log is `$DINO_RUNS/scheduler.log`, which ends with `QUEUE EMPTY` when a job list is done. Run one job list at a time: `start.sh` replaces the running scheduler, and jobs still waiting in the old list would not start. `acwm_phys.txt` trains Cloth Move, Push Sand and Stack Cube and then evaluates each model, measures the physical quantities and renders the summary videos (about a day on a single GPU). `pour_water.txt` trains and evaluates Pour Water models A and B.
+
+```bash
+bash repro/queue/start.sh repro/jobs/acwm_phys.txt
+```
+
+```bash
+bash repro/queue/start.sh repro/jobs/pour_water.txt
+```
+
+**Videos, figure and tables.** These read the saved frames and JSON files, no GPU: the per-episode videos of the Drive folders, the cloth and sand area figure, and the two tables of this README.
+
+```bash
+R=$DINO_WORK/results/acwm_phys
+python repro/eval/render_acwm_phys.py $R/cloth_h1f5 $R/figs/cloth_h1f5 --per_episode 10
+python repro/eval/render_acwm_phys.py $R/sand_h1f5 $R/figs/sand_h1f5 --per_episode 10
+python repro/eval/render_acwm_phys.py $R/stack_h1f5 $R/figs/stack_h1f5 --per_episode 10 --groups success,fail
+python repro/eval/plot_acwm_phys.py $R $R/figs/fig_area_cloth_sand.png
+python repro/eval/tables_acwm_phys.py $DINO_WORK/results
+```
+
+**Where things land and what to compare.** Models: `$DINO_WORK/train_runs/outputs/<job>/`. Logs: `$DINO_WORK/runs/<job>.log`. Results: `$DINO_WORK/results/acwm_phys/<env>_h1f5.json` and `<env>_h1f5_quant.json` (videos and grids under `figs/`), and `$DINO_WORK/results/pour_water/`. `tables_acwm_phys.py` prints the two tables above from your JSON files; the JSON files of our runs are in the Drive folders. A re-run will not be bit-identical (GPU non-determinism), and with one seed per environment we do not know how much the numbers move between runs.
+
 - Pour Water's water-amount analysis and figures are separate scripts (`repro/eval/eval_pour_water_volume.py`, `plot_pour_water.py`, `render_pour_water.py`; usage in each file).
-- What ran: the job lists, loader, configs and evaluation scripts on this branch are the files that produced the results (the runs were made just before they were committed; [LOCAL.md §6](repro/LOCAL.md)). The download script was tested on two splits, which came out byte-identical to the data used. The whole sequence has not been re-run from a fresh clone, and a re-run will not be bit-identical (GPU non-determinism).
-- Run records: `repro/runs/{train,eval}/dinowm_{pourwater,clothmove,pushsand,stackcube}-*/run.yaml`.
+- The data checks behind the conventions in SETTINGS.md §8 (which action drives which frame, the Push Sand action encoding, the frameskip) are in [`repro/setup/checks/acwm_phys/`](repro/setup/checks/acwm_phys/README.md). They are not needed to reproduce the results.
+- Run records (what each run was): `repro/runs/{train,eval}/dinowm_{pourwater,clothmove,pushsand,stackcube}-*/run.yaml`.
 
 ## Results
 
@@ -268,8 +294,6 @@ python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_bas
 ```bash
 bash repro/queue/start.sh
 ```
-
-**What was tested.** On 2026-10-09 we ran the commands above on the machine above in bash, with an empty home directory, a clean environment (`env -i`) and pip (no uv on `PATH`). Every step succeeded, including `check_env.sh --pyflex` and the quick planning run. Not repeated in that run: the `core` and `deformable` downloads (we linked our existing data instead; the `checkpoints` download, which uses the same downloader, was run) and the job queue. In a separate Ubuntu 24.04 container without `/usr/lib/nvidia`, the mujoco-py build failed without `libosmesa6-dev` and succeeded with it; its PointMaze frames differ from the dataset frames by a mean of 0.03 on the 0–255 scale (0.00 with the GPU renderer). Other Linux distributions and other GPUs are untested.
 
 ## Branches and changes to upstream
 
