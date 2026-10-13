@@ -177,10 +177,13 @@ if is_done train; then
   log "stage 'train' already done -> skipping"
 else
   log "training models A (clean) and B (distract) on GPUs [$GPU_LIST]"
+  # bg_source is recorded in each model's hydra.yaml, which is where eval.py
+  # reads the background source for T2-T4; without it a `--bg_source synthetic`
+  # run would collect synthetic data and then evaluate on DAVIS.
   # TRAIN_EXTRA is intentionally unquoted: it carries several hydra overrides
   timed train bash scripts/train.sh \
     --gpus "$GPU_LIST" --epochs "$EPOCHS" --batch_size "$BATCH_SIZE" \
-    --exp_root "$EXP_ROOT" $TRAIN_EXTRA
+    --exp_root "$EXP_ROOT" "env.kwargs.bg_source=$BG_SOURCE" $TRAIN_EXTRA
 fi
 
 # --------------------------------------------------------------------------- #
