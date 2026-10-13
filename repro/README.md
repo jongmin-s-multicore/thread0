@@ -1,17 +1,17 @@
-# repro — DINO-WM 재현 도구와 실행 방법
+# repro: DINO-WM 재현 도구와 실행 방법
 
-이 레포(gaoyuezhou/dino_wm 의 fork)로 DINO-WM 의 planning 벤치마크를 다시 돌리는 방법이다. GPU 환경과 무관한 공용 도구(환경 구축·작업 큐·평가)와 프로토콜을 둔다. GPU 환경에 맞춘 코드 수정과 그 환경의 실행 기록은 환경별 브랜치에 있다 ([루트 README](../README.md#branches-and-changes-to-upstream)).
+이 문서는 이 레포(gaoyuezhou/dino_wm 의 fork)로 DINO-WM 의 planning 벤치마크를 다시 실행하는 방법을 설명한다. 여기에는 GPU 환경과 무관한 공용 도구와 프로토콜을 둔다. 공용 도구는 환경 구축, 작업 큐, 평가 도구다. GPU 환경에 맞춘 코드 수정과 그 환경의 실행 기록은 환경별 브랜치에 있다 ([루트 README](../README.md#branches-and-changes-to-upstream)).
 
-- 모델·데이터·하이퍼파라미터·평가 프로토콜·upstream 과 다른 점: **[SETTINGS.md](SETTINGS.md)**
+- 모델·데이터·하이퍼파라미터·평가 프로토콜·upstream 과 다른 점: [SETTINGS.md](SETTINGS.md)
 - 결과와 해석: [이슈](https://github.com/jongmin-s-multicore/thread0/issues)
 
-Reacher, 일반화 환경(WallRandom·PushObj·GranularRandom), 다른 모델 베이스라인은 데이터나 구현이 공개되지 않았거나 코드가 더 필요해서 돌리지 않았다. 인코더 비교(Table 2)도 이번에는 돌리지 않았다 ([SETTINGS.md §1](SETTINGS.md#1-구성)).
+Reacher, 일반화 환경(WallRandom·PushObj·GranularRandom), 다른 모델 베이스라인은 실행하지 않았다. 데이터나 구현이 공개되지 않았거나 코드가 더 필요하기 때문이다. 인코더 비교(Table 2)도 이번에는 실행하지 않았다 ([SETTINGS.md §1](SETTINGS.md#1-구성)).
 
 ---
 
 ## 구성
 
-경로는 모두 `repro/env.sh` 에서 온다. 산출물(`$DINO_RUNS`, `$DINO_TRAIN`, `$DINO_WORK/results`)은 레포 밖에 생기고 커밋하지 않는다.
+경로는 모두 `repro/env.sh` 에서 정한다. 산출물(`$DINO_RUNS`, `$DINO_TRAIN`, `$DINO_WORK/results`)은 레포 밖에 생긴다. 산출물은 커밋하지 않는다.
 
 ```
 repro/
@@ -57,7 +57,7 @@ repro/
     └── conda-dinowm.txt           conda 패키지 목록 (micromamba list)
 ```
 
-job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 기록(`repro/runs/{train,eval}/<run-id>/run.yaml`, run-id 형식은 [AGENTS.md §2](../AGENTS.md#2-재현-디렉토리-구조))은 그 실행을 돌린 환경 브랜치에 둔다.
+job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 기록(`repro/runs/{train,eval}/<run-id>/run.yaml`)은 그 실행을 한 환경 브랜치에 둔다. run-id 형식은 [AGENTS.md §2](../AGENTS.md#2-재현-디렉토리-구조) 에 있다.
 
 ---
 
@@ -65,10 +65,10 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
 
 ### 설치
 
-한 셸(bash 또는 zsh)에서 레포 루트로 차례로 실행한다. 아래 명령 블록에는 일부러 `#` 주석을 넣지 않는다 — zsh 는 `setopt interactivecomments` 가 꺼져 있으면(oh-my-zsh 등이 켜지 않은 기본 상태) 줄 끝 `# ...` 을 명령의 인자로 넘긴다.
+한 셸(bash 또는 zsh)에서 레포 루트로 차례로 실행한다. 아래 명령 블록에는 `#` 주석을 넣지 않는다. zsh 는 `setopt interactivecomments` 가 설정되어 있지 않으면 줄 끝 `# ...` 을 명령의 인자로 넘기기 때문이다. oh-my-zsh 등이 이 옵션을 설정하지 않은 zsh 의 기본 상태가 여기에 해당한다.
 
-0. 사전 준비: NVIDIA 드라이버, `git curl bzip2 unzip zip gcc`, mujoco-py 빌드용 `libglew-dev libgl1-mesa-dev`. `/usr/lib/nvidia` 가 없으면(우분투 드라이버 패키지가 만든다) mujoco-py 가 CPU 렌더러로 빌드되고 `libosmesa6-dev` 도 필요하다. Rope·Granular planning 에는 docker + NVIDIA container runtime (sudo 없이 docker 그룹). 디스크는 `$DINO_WORK` 에 PointMaze·PushT·Wall 약 110 GB, Rope·Granular 약 160 GB 더 (압축을 푸는 동안 15 GB 더) — 홈이 작으면 큰 디스크를 작업 루트로 정한다.
-1. 레포와 작업 루트. 홈 디렉토리를 가정하지 않는다. 아래 명령은 지금 디렉토리에 clone 하고, 레포 위치는 어디든 된다. `DINO_WORK` 는 레포 밖이면 어디든 된다 — 셋째 줄의 `~/dinowm` 은 기본값일 뿐이라 홈이 작으면 큰 디스크 경로로 바꾼다. 다른 경로를 쓰면 새 셸마다 다시 export 하거나 `.claude/env.local.sh` (gitignore, 아래 "머신별 설정")에 적는다. 홈 아래로 고정되는 것은 MuJoCo(`~/.mujoco/mujoco210`, mujoco-py 의 기본 위치) 하나이고, 이것도 `MUJOCO_DIR` 로 바꿀 수 있다.
+0. 사전 준비: NVIDIA 드라이버, `git curl bzip2 unzip zip gcc`, mujoco-py 빌드용 `libglew-dev libgl1-mesa-dev` 가 필요하다. `/usr/lib/nvidia` 는 우분투 드라이버 패키지가 만든다. 이 경로가 없으면 mujoco-py 가 CPU 렌더러로 빌드되고 `libosmesa6-dev` 도 필요하다. Rope·Granular planning 에는 docker 와 NVIDIA container runtime 이 필요하다. docker 는 sudo 없이 docker 그룹으로 쓴다. 디스크는 `$DINO_WORK` 에 PointMaze·PushT·Wall 용으로 약 110 GB 가 필요하다. Rope·Granular 에는 약 160 GB 가 더 필요하다. 압축을 푸는 동안에는 15 GB 가 더 필요하다. 홈이 작으면 큰 디스크를 작업 루트로 정한다.
+1. 레포와 작업 루트. 홈 디렉토리를 가정하지 않는다. 아래 명령은 지금 디렉토리에 clone 한다. 레포 위치는 어디든 된다. `DINO_WORK` 는 레포 밖이면 어디든 된다. 셋째 줄의 `~/dinowm` 은 기본값이다. 홈이 작으면 큰 디스크 경로로 바꾼다. 다른 경로를 쓰면 새 셸마다 다시 export 하거나 `.claude/env.local.sh` 에 적는다. 이 파일은 gitignore 대상이고 아래 "머신별 설정"에서 설명한다. 홈 아래로 고정되는 것은 MuJoCo 하나다. 위치는 mujoco-py 의 기본 위치인 `~/.mujoco/mujoco210` 이고 `MUJOCO_DIR` 로 바꿀 수 있다.
 
    ```bash
    git clone https://github.com/jongmin-s-multicore/thread0.git
@@ -76,7 +76,7 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
    export DINO_WORK=~/dinowm
    ```
 
-2. 설치: micromamba env (Python 3.9, `environment.yaml` 고정 버전) + MuJoCo 2.1.0 + mujoco-py 빌드. `uv` 가 PATH 에 있으면 uv, 없으면 pip 로 설치한다. `--dry-run` 은 실행할 명령만 출력한다. `install_pyflex.sh` 는 Rope·Granular planning 에만 필요하다 (도커 빌드, 약 1분).
+2. 설치: micromamba env (Python 3.9, `environment.yaml` 고정 버전)를 만들고 MuJoCo 2.1.0 을 설치하고 mujoco-py 를 빌드한다. `uv` 가 PATH 에 있으면 uv 로, 없으면 pip 로 설치한다. `--dry-run` 은 실행할 명령만 출력한다. `install_pyflex.sh` 는 Rope·Granular planning 에만 필요하다. 도커에서 빌드하고 약 1분 걸린다.
 
    ```bash
    bash repro/setup/install_env.sh --dry-run
@@ -84,14 +84,14 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
    bash repro/setup/install_pyflex.sh
    ```
 
-3. 데이터와 공개 체크포인트 (OSF). `core checkpoints` 는 PointMaze·PushT·Wall 과 체크포인트, `deformable` 은 Rope·Granular. 전부 받으면 zip 21 GB, 풀면 약 236 GB. 끊기면 같은 명령을 다시 실행하면 이어 받는다.
+3. 데이터와 공개 체크포인트 (OSF). `core checkpoints` 는 PointMaze·PushT·Wall 과 체크포인트를 받는다. `deformable` 은 Rope·Granular 를 받는다. 모두 받으면 zip 이 21 GB 이고 풀면 약 236 GB 다. 다운로드가 끊기면 같은 명령을 다시 실행한다. 그러면 이어 받는다.
 
    ```bash
    bash repro/setup/download_data.sh core checkpoints
    bash repro/setup/download_data.sh deformable
    ```
 
-4. 점검. `source repro/env.sh` 는 새 셸마다 레포 루트에서 한다. `check_env.sh` 는 torch/CUDA, mujoco-py, DINOv2, 공개 체크포인트로 렌더·동역학 대조. `--pyflex` 는 PyFleX 와 Rope·Granular 까지.
+4. 점검. `source repro/env.sh` 는 새 셸마다 레포 루트에서 실행한다. `check_env.sh` 는 torch/CUDA, mujoco-py, DINOv2 를 점검하고 공개 체크포인트로 렌더·동역학을 대조한다. `--pyflex` 를 주면 PyFleX 와 Rope·Granular 도 점검한다.
 
    ```bash
    source repro/env.sh
@@ -99,14 +99,14 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
    bash repro/setup/check_env.sh --pyflex
    ```
 
-5. 공개 체크포인트로 planning 한 번 (PointMaze, 에피소드 2개, 1분 안쪽).
+5. 공개 체크포인트로 planning 을 한 번 실행한다 (PointMaze, 에피소드 2개, 1분 이내).
 
    ```bash
    python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_base_path=$DINO_CKPT \
      n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
    ```
 
-6. 벤치마크 전체 (작업 큐). GPU 메모리가 부족하면 환경 브랜치(루트 README "Branches and changes to upstream")를 쓴다. 큐 설정은 아래 "머신별 설정".
+6. 벤치마크 전체를 작업 큐로 실행한다. GPU 메모리가 부족하면 환경 브랜치를 쓴다. 환경 브랜치는 루트 README 의 "Branches and changes to upstream" 에 있다. 큐 설정은 아래 "머신별 설정"에 있다.
 
    ```bash
    bash repro/queue/start.sh
@@ -133,37 +133,37 @@ job 은 `jobs/benchmark.txt` 와 `$DINO_RUNS/<job>/` 의 이름이다. 실행 �
 | OS | Ubuntu 24.04, NVIDIA driver 580.178.04 |
 | 소프트웨어 | Python 3.9.19 (conda-forge), torch 2.3.0+cu121, mujoco-py 2.1.2.14 (EGL), gym 0.23.1, hydra-core 1.2.0, PyFleX (CUDA 9.2 도커 빌드) |
 
-`repro/setup/` 스크립트는 위 환경에서 손으로 실행한 명령을 옮긴 것이다. 2026-10-09 에 같은 머신에서 빈 홈 디렉토리와 빈 환경변수(`env -i`), uv 없이(pip) bash 로 위 1–5 를 처음부터 끝까지 돌렸고 모든 단계가 성공했다 (`check_env.sh --pyflex` 포함). 그 실행에서 `core`·`deformable` 다운로드는 기존 데이터를 링크로 대신했고 (`checkpoints` 다운로드는 같은 스크립트로 실제로 받았다), 작업 큐(6)는 띄우지 않았다. `/usr/lib/nvidia` 가 없는 Ubuntu 24.04 컨테이너에서는 mujoco-py 빌드가 `libosmesa6-dev` 없이 실패하고 있으면 성공했다 (CPU 렌더러의 PointMaze 프레임은 데이터셋과 0~255 픽셀 평균 0.03 차이, EGL 은 0.00). 다른 배포판·GPU 는 확인하지 않았다.
+`repro/setup/` 스크립트는 위 환경에서 손으로 실행한 명령을 스크립트로 옮겨 만들었다. 2026-10-09 에 같은 머신에서 빈 홈 디렉토리와 빈 환경변수(`env -i`)로 위 1–5 를 처음부터 끝까지 실행했다. uv 없이 pip 를 썼고 셸은 bash 였다. `check_env.sh --pyflex` 를 포함해 모든 단계가 성공했다. 그 실행에서 `core`·`deformable` 다운로드는 기존 데이터의 링크로 대신했다. `checkpoints` 다운로드는 같은 스크립트로 받았다. 작업 큐(6)는 실행하지 않았다. `/usr/lib/nvidia` 가 없는 Ubuntu 24.04 컨테이너에서는 mujoco-py 빌드가 `libosmesa6-dev` 가 없으면 실패했고 있으면 성공했다. CPU 렌더러의 PointMaze 프레임은 데이터셋과 0~255 픽셀 평균 0.03 차이가 났고 EGL 은 0.00 이었다. 다른 배포판·GPU 는 확인하지 않았다.
 
 ### 설치된 구성
 
 | 항목 | 값 |
 |---|---|
-| Python env | micromamba prefix env, Python 3.9.19 (conda-forge), `environment.yaml` 의 pip 고정 버전 217개 + patchelf. 목록은 [requirements/](requirements/) |
+| Python env | micromamba prefix env, Python 3.9.19 (conda-forge), `environment.yaml` 의 pip 고정 버전 217개와 patchelf. 목록은 [requirements/](requirements/) 에 있다 |
 | 주요 패키지 | torch 2.3.0+cu121, torchvision 0.18.0, gym 0.23.1, mujoco-py 2.1.2.14, d4rl 1.1, hydra-core 1.2.0, pymunk 6.8.0 |
 | MuJoCo | 2.1.0 (`~/.mujoco/mujoco210`). mujoco-py 는 EGL(GPU) 빌더로 컴파일됐다 |
-| DINOv2 | `models/dino.py` 가 `facebookresearch/dinov2:85a2460` 을 torch.hub 로 받는다 (현재 main 은 Python 3.10 문법) |
-| PyFleX | AdaptiGraph `a7c7535` 의 PyFleX, `xingyu/softgym` 도커(CUDA 9.2)에서 빌드. 헤드리스 EGL — `EGL_GPU` 는 렌더링할 EGL 장치 번호 (기본 0, 작업의 GPU 와 따로 정해진다. 바꾸려면 overlay 에 `env:EGL_GPU=N`) |
+| DINOv2 | `models/dino.py` 가 `facebookresearch/dinov2:85a2460` 을 torch.hub 로 받는다. 현재 main 은 Python 3.10 문법을 쓴다 |
+| PyFleX | AdaptiGraph `a7c7535` 의 PyFleX, `xingyu/softgym` 도커(CUDA 9.2)에서 빌드. 헤드리스 EGL 을 쓴다. `EGL_GPU` 는 렌더링할 EGL 장치 번호다. 기본은 0 이고 작업의 GPU 와 따로 정해진다. 바꾸려면 overlay 에 `env:EGL_GPU=N` 을 적는다 |
 
 ## 데이터·체크포인트
 
-OSF 프로젝트 [bmw48](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) 에서 `repro/setup/download_data.sh` 로 받는다 (zip 21 GB, 풀면 약 236 GB). 데이터셋 내용은 [SETTINGS.md §3](SETTINGS.md#3-데이터).
-공개 체크포인트는 `point_maze`, `pusht`, `wall_single` 셋이다 (upstream README 의 `model_name=wall` 은 `wall_single` 이 맞다). Rope·Granular 체크포인트는 공개되지 않아 직접 학습한다.
+OSF 프로젝트 [bmw48](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) 에서 `repro/setup/download_data.sh` 로 받는다 (zip 21 GB, 풀면 약 236 GB). 데이터셋 내용은 [SETTINGS.md §3](SETTINGS.md#3-데이터) 에 있다.
+공개 체크포인트는 `point_maze`, `pusht`, `wall_single` 셋이다. upstream README 는 `model_name=wall` 이라고 쓰지만 맞는 이름은 `wall_single` 이다. Rope·Granular 체크포인트는 공개되지 않아 학습해서 쓴다.
 
 ---
 
 ## 실행
 
-레포 루트에서 실행한다. 셸마다 `source repro/env.sh` 를 먼저 한다 (bash 또는 zsh).
+레포 루트에서 실행한다. 셸마다 `source repro/env.sh` 를 먼저 실행한다 (bash 또는 zsh).
 
 | 명령 | 하는 일 |
 |---|---|
-| `bash repro/queue/start.sh` | 벤치마크 전체를 작업 큐로. 위에서부터 GPU 슬롯이 나는 대로 띄운다 (기본: GPU 당 1개 — 머신별 조건은 아래). 로그 `$DINO_RUNS/scheduler.log` |
-| `bash repro/queue/wait_event.sh 3300 major` | 작업이 끝나거나 실패할 때까지 기다렸다가 요약 출력 |
-| `python3 repro/eval/summarize.py` | `$DINO_WORK/results/summary.md` 로 요약 |
-| `bash repro/queue/kill_job.sh pusht_mpc` | 작업 하나 끄기 (다시 넣으려면 `$DINO_RUNS/pusht_mpc` 를 옮기고 큐를 다시 띄운다) |
+| `bash repro/queue/start.sh` | 벤치마크 전체를 작업 큐로 실행한다. 위에서부터 GPU 슬롯이 비는 대로 시작한다. 기본은 GPU 당 1개다. 머신별 조건은 아래에 있다. 로그는 `$DINO_RUNS/scheduler.log` 에 쓴다 |
+| `bash repro/queue/wait_event.sh 3300 major` | 작업이 끝나거나 실패할 때까지 기다린 뒤 요약을 출력한다 |
+| `python3 repro/eval/summarize.py` | `$DINO_WORK/results/summary.md` 에 요약을 쓴다 |
+| `bash repro/queue/kill_job.sh pusht_mpc` | 작업 하나를 종료한다. 다시 넣으려면 `$DINO_RUNS/pusht_mpc` 를 옮기고 큐를 다시 시작한다 |
 
-작업 하나만 손으로 돌릴 때 (큐가 쓰는 것과 같은 명령, 두 번째 인자가 GPU 번호).
+작업 하나를 손으로 실행할 때는 아래 명령을 쓴다. 큐가 쓰는 명령과 같다. 두 번째 인자가 GPU 번호다.
 
 ```bash
 # 공개 체크포인트 MPC-CEM
@@ -190,25 +190,25 @@ CUDA_VISIBLE_DEVICES=<gpu> python repro/eval/deform_arm_video.py $DINO_RUNS/rope
   planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5 ckpt_base_path=$DINO_TRAIN
 ```
 
-- 산출물: planning 은 `$DINO_RUNS/<job>/` 에 `logs.json`(MPC 반복별 `mpc/*`, 마지막 `final_eval/*`), `plan_targets.pkl`(시작·목표, `goal_source=file` 로 재사용 가능), 그림·영상. 학습은 `$DINO_TRAIN/outputs/<job>/` 에 `hydra.yaml`, `checkpoints/model_<epoch>.pth`, `epoch_logs.jsonl`.
-- 같은 job 을 다시 돌리려면 `$DINO_RUNS/<job>/` 를 지우거나 옮긴다 (`DONE` 이 있으면 건너뛴다).
-- GPU 메모리가 부족하면(예: 24 GB) 환경 브랜치의 메모리 수정을 쓴다 — [`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local) 의 `repro/LOCAL.md`.
-- PointMaze 작업은 env 워커 50개가 각자 mujoco-py EGL 컨텍스트를 `CUDA_VISIBLE_DEVICES` 의 첫 GPU 에 열어 GPU 메모리를 수 GB 더 쓴다 (upstream `SubprocVectorEnv` 동작). GPU 하나에 작업 여러 개를 돌린다면 overlay 로 `need=` 를 준다.
+- 산출물: planning 은 `$DINO_RUNS/<job>/` 에 `logs.json`(MPC 반복별 `mpc/*`, 마지막 `final_eval/*`), `plan_targets.pkl`(시작·목표, `goal_source=file` 로 재사용 가능), 그림·영상을 쓴다. 학습은 `$DINO_TRAIN/outputs/<job>/` 에 `hydra.yaml`, `checkpoints/model_<epoch>.pth`, `epoch_logs.jsonl` 을 쓴다.
+- 같은 job 을 다시 실행하려면 `$DINO_RUNS/<job>/` 를 지우거나 옮긴다. `DONE` 이 있으면 그 job 은 건너뛴다.
+- GPU 메모리가 부족하면(예: 24 GB) 환경 브랜치의 메모리 수정을 쓴다. [`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local) 의 `repro/LOCAL.md` 에 설명이 있다.
+- PointMaze 작업은 env 워커 50개가 각자 mujoco-py EGL 컨텍스트를 `CUDA_VISIBLE_DEVICES` 의 첫 GPU 에 열어 GPU 메모리를 수 GB 더 쓴다. upstream `SubprocVectorEnv` 의 동작이다. GPU 하나에 작업 여러 개를 실행한다면 overlay 로 `need=` 를 준다.
 
 ### 머신별 설정 (레포에 올리지 않는다)
 
-GPU 개수·메모리에 따라 정하는 값은 레포 밖에 둔다. `repro/env.sh` 는 `.claude/env.local.sh` 가 있으면 먼저 읽는다 (`.claude/` 는 gitignore). 그 파일에서도 `${VAR:-값}` 으로 써서 이미 export 한 값을 존중한다.
+GPU 개수·메모리에 따라 정하는 값은 레포 밖에 둔다. `repro/env.sh` 는 `.claude/env.local.sh` 가 있으면 먼저 읽는다. `.claude/` 는 gitignore 대상이다. 그 파일에서도 `${VAR:-값}` 형식으로 쓴다. 이 형식은 셸에서 먼저 export 한 값을 유지한다.
 
 | 변수 | 뜻 | 기본 |
 |---|---|---|
 | `DINO_WORK` | 작업 루트 | `~/dinowm` |
-| `DINO_GPUS`, `DINO_SLOTS_PER_GPU` | 큐가 쓰는 GPU, GPU 당 동시 작업 수 | nvidia-smi 의 GPU 전부, 1 |
+| `DINO_GPUS`, `DINO_SLOTS_PER_GPU` | 큐가 쓰는 GPU, GPU 당 동시 작업 수 | nvidia-smi 의 모든 GPU, 1 |
 | `DINO_NEED_MB_{PLAN,TRAIN,CMD}` | 작업 종류별로 시작에 필요한 GPU 여유 메모리 (MB) | 0 |
-| `DINO_QUEUE_COOLDOWN` | 같은 GPU 에 연달아 띄우는 간격 (초) | 60 |
+| `DINO_QUEUE_COOLDOWN` | 같은 GPU 에 작업을 연달아 시작하는 간격 (초) | 60 |
 | `DINO_JOBS_LOCAL` | 작업별 조건 overlay 파일. 한 줄: `<job> [gpu=N] [need=MB] [env:K=V ...]` | 없음 |
 
 ```bash
-# .claude/env.local.sh 예 — 값은 머신에 맞춰 정한다
+# .claude/env.local.sh 예. 값은 머신에 맞춰 정한다
 export DINO_WORK=${DINO_WORK:-/path/to/dinowm}
 export DINO_SLOTS_PER_GPU=${DINO_SLOTS_PER_GPU:-<N>}
 export DINO_NEED_MB_PLAN=${DINO_NEED_MB_PLAN:-<MB>} DINO_NEED_MB_TRAIN=${DINO_NEED_MB_TRAIN:-<MB>}
@@ -220,9 +220,9 @@ export DINO_JOBS_LOCAL=${DINO_JOBS_LOCAL:-$THREAD0/.claude/jobs.local.txt}
 
 ## 결과와 코드 버전
 
-결과는 GitHub 이슈로 올리고, 그 결과를 낸 브랜치와 커밋 해시를 적는다. 러너(`run_plan.sh`·`run_train.sh`·`run_cmd.sh`)는 `run_info.txt` 에 브랜치·커밋·`DINO_WM_*` 환경변수를 기록한다 (이 형식 전에 시작한 실행의 run_info 에는 브랜치·커밋이 없다 — 그 경우 환경 브랜치 문서에 대응을 적는다).
+결과는 GitHub 이슈로 올린다. 이슈에는 그 결과를 낸 브랜치와 커밋 해시를 적는다. 러너(`run_plan.sh`·`run_train.sh`·`run_cmd.sh`)는 `run_info.txt` 에 브랜치·커밋·`DINO_WM_*` 환경변수를 기록한다. 이 형식 전에 시작한 실행의 run_info 에는 브랜치·커밋이 없다. 그 경우 환경 브랜치 문서에 대응을 적는다.
 
 ## 라이선스 주의
 
-- 데이터·공개 체크포인트는 OSF 에서 받고 재배포하지 않는다. 직접 학습한 가중치도 이 레포에 넣지 않는다.
-- AdaptiGraph (MIT; PyFleX 는 NVIDIA FleX 기반), DINOv2 (Apache-2.0) 는 각 저장소에서 받는다.
+- 데이터·공개 체크포인트는 OSF 에서 받는다. 재배포하지 않는다. 학습해서 만든 가중치도 이 레포에 넣지 않는다.
+- AdaptiGraph (MIT), DINOv2 (Apache-2.0) 는 각 저장소에서 받는다. AdaptiGraph 의 PyFleX 는 NVIDIA FleX 기반이다.
