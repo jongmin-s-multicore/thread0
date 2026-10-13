@@ -1,0 +1,21 @@
+name: acwm_cloth_move
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/deformable/clothmove
+  exclude: []
+  action_format: raw
+  action_dims: [0, 1, 2, 4, 5, 6] # dims 3 and 7 are 1.0 in every episode
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform"
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12
