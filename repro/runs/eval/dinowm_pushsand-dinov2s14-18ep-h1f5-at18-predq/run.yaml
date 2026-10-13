@@ -1,0 +1,46 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_pushsand-dinov2s14-18ep-h1f5-at18-predq
+kind: eval
+stack: dinowm
+job: pq_sand_h1f5
+date: 2026-10-11
+env: acwm_push_sand
+model:
+  ckpt: $DINO_TRAIN/outputs/train_sand_h1f5/checkpoints/model_latest.pth
+  epoch: 18
+  num_hist: 1
+  frameskip: 5
+protocol:
+  sets: 'val 179, ind_test 100, ood_test 100 (입자 약 2배)'
+  one_step: >-
+    슬라이스 4000개 (균등 간격), LPIPS(VGG)·SSIM·MSE·잠재 MSE — eval_pred_quality.py 와 같은 계산. 기준선 copy_last,
+    recon_copy, recon_ceiling
+  open_loop: >-
+    ACWM-Phys eval.py 와 같은 37프레임 창, 에피소드마다 시작 linspace(0, 프레임 수 - 37, 10), 프레임 간격 frameskip. 예측 프레임 전부를
+    모은다. 잠재 MSE·코사인, ACWM 방식 지표(환경의 obs_shape, [0, 1])와 정적 기준선
+  whole_episode: '처음 num_hist 프레임 + 모든 action 으로 에피소드 끝까지. 디코딩한 프레임(모델, 정답의 재구성)을 세트별 npz 로 저장'
+  action_sensitivity: 다음 에피소드의 action / 정규화한 action 0 으로 교체
+  quantities: >-
+    모래(하늘색) 픽셀 수·IoU·중심, 밀판(가장 큰 어두운 덩어리)의 중심 — 저장한 프레임과 정답 프레임을 같은 색 마스크로 잰다 (eval_acwm_phys_quant.py,
+    GPU 불필요)
+  intervals: '에피소드 단위 bootstrap 95 %'
+command: >-
+  bash repro/queue/run_cmd.sh pq_sand_h1f5 <gpu> python $THREAD0/repro/eval/eval_acwm_phys.py
+  $DINO_TRAIN train_sand_h1f5 $DINO_WORK/results/acwm_phys/sand_h1f5
+then: >-
+  bash repro/queue/run_cmd.sh quant_sand_h1f5 <gpu> python $THREAD0/repro/eval/eval_acwm_phys_quant.py
+  $DINO_TRAIN train_sand_h1f5 $DINO_WORK/results/acwm_phys/sand_h1f5 ; bash repro/queue/run_cmd.sh
+  render_sand_h1f5 <gpu> python $THREAD0/repro/eval/render_acwm_phys.py
+  $DINO_WORK/results/acwm_phys/sand_h1f5 $DINO_WORK/results/acwm_phys/figs/sand_h1f5
+runner_env: 'DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 (run_info.txt; 청크는 합산 순서만 바꾼다, LOCAL.md §2)'
+code: >-
+  hanbin5/acwm-phys 의 커밋 전 작업 트리 (run_info.txt 의 commit=d0e27aa 는 그 바탕 커밋). 같은 내용의 커밋: 로더·설정 ebe1aea,
+  작업 목록 060b292, 평가 도구 10e8192. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정
+  (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
+output: >-
+  $DINO_WORK/results/acwm_phys/sand_h1f5.json, $DINO_WORK/results/acwm_phys/sand_h1f5_<set>.npz,
+  $DINO_WORK/results/acwm_phys/sand_h1f5_quant.json,
+  $DINO_WORK/results/acwm_phys/sand_h1f5_quant_<set>.npz, 영상·격자 그림은 render 작업의 출력 폴더
+results: >-
+  json 의 sets.<val|ind_test|ood_test>.{m1, m2, m2_curve, m2_latent, acwm, m5, m3, m3_curve}, quant
+  json 의 sets.<set>.groups.<group>.<object>

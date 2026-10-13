@@ -1,0 +1,38 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_stackcube-dinov2s14-25ep-h1f5
+kind: train
+stack: dinowm
+job: train_stack_h1f5
+date: 2026-10-11
+env: acwm_stack_cube
+dataset: >-
+  $DATASET_DIR/acwm_phys/rigid_dynamics/stack_cube (HF t1an/ACWM-Phys 4017e5f). ind_train 1373개(쌓기 실패
+  373개 포함)를 무작위 0.9/0.1 seed 42 로 나눠 학습 1235 / 검증 138 에피소드, 에피소드마다 53–58프레임. action 7차원 그대로
+  (action_format raw)
+model:
+  encoder: 'DINOv2 ViT-S/14 patch tokens, 동결 (hub 85a2460)'
+  predictor: 'ViT depth 6, heads 16, mlp 2048, dropout 0.1'
+  decoder: 'VQ-VAE decoder (quantize False), 같은 학습 안에서 따로 최적화: 정답 프레임 잠재(detach)를 재구성하는 MSE 만 학습'
+  num_hist: 1
+  num_pred: 1
+  frameskip: 5
+  img_size: 224
+training:
+  epochs: 25
+  batch_size: 24
+  optimizer: 'predictor·action encoder AdamW, decoder Adam'
+  lr: >-
+    decoder 3e-4, predictor 5e-5, action encoder 5e-4 (predictor 를 바꿨다 — upstream 5e-4, 논문 Table 12 는
+    predictor 5e-5)
+  seed: 0
+  save_every_x_epoch: 5
+  epochs_note: 'optimizer step 수가 Pour Water num_hist 1 실행(64,170)과 비슷하도록 정했다 (jobs/acwm_phys.txt 머리말)'
+command: >-
+  bash repro/queue/run_train.sh train_stack_h1f5 <gpu> env=acwm_stack_cube frameskip=5 num_hist=1
+  training.epochs=25 training.save_every_x_epoch=5 training.predictor_lr=5e-5 training.batch_size=24
+output: >-
+  $DINO_TRAIN/outputs/train_stack_h1f5/ (hydra.yaml, checkpoints/model_<epoch>.pth, epoch_logs.jsonl)
+code: >-
+  hanbin5/acwm-phys 의 커밋 전 작업 트리 (run_info.txt 의 commit=d0e27aa 는 그 바탕 커밋). 같은 내용의 커밋: 로더·설정 ebe1aea,
+  작업 목록 060b292, 평가 도구 10e8192. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정
+  (git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
