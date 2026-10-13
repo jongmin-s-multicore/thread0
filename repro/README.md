@@ -30,12 +30,17 @@ repro/
 │   └── kill_job.sh wait_event.sh   작업 끄기 (PID 기준), 다음 이벤트까지 기다리며 요약 보기
 ├── jobs/benchmark.txt         벤치마크 작업 목록 (job 이름, 종류, 선행 작업, hydra 인자. GPU·메모리 조건은 머신별 overlay)
 ├── jobs/pour_water_pilot.txt  ACWM-Phys Pour Water 파일럿 (SETTINGS.md §7)
+├── jobs/acwm_phys_pilot.txt   ACWM-Phys Cloth Move·Push Sand·Stack Cube 파일럿 (에피소드 60개, 3 epoch)
+├── jobs/acwm_phys.txt         위 세 환경의 본 학습과 평가·물리량·영상 (로더 datasets/acwm_phys_dset.py, 설정 conf/env/acwm_*.yaml)
 ├── eval/
 │   ├── eval_pred_quality.py   검증 분할 전체의 1-step 예측 LPIPS·SSIM
 │   ├── eval_pour_water.py     ACWM-Phys Pour Water 예측 품질: 한 스텝·열린 루프 롤아웃·전체 에피소드·action 민감도, 기준선 (SETTINGS.md §7.3)
 │   ├── eval_pour_water_volume.py  Pour Water 물 양 분석: 전체 에피소드 롤아웃의 물 색 픽셀 수(화면 전체·상자 바닥)를 에피소드별로, action 민감도를 창 시작 t0 별로 (npz)
 │   ├── plot_pour_water.py     위 두 결과(JSON, npz)와 epoch_logs 로 그림 5개
 │   ├── render_pour_water.py   정답 / A / B 전체 에피소드 롤아웃의 격자 그림과 나란히 보는 mp4
+│   ├── eval_acwm_phys.py      ACWM-Phys Cloth Move·Push Sand·Stack Cube 예측 품질: eval_pour_water.py 와 같은 지표·기준선, 전체 에피소드 롤아웃 프레임을 npz 로 저장
+│   ├── eval_acwm_phys_quant.py  위 프레임과 정답을 같은 색 마스크로 재서 비교: 천·모래 픽셀 수와 IoU, 그리퍼·밀판·큐브 위치, 쌓임 판정 (GPU 를 쓰지 않는다)
+│   ├── render_acwm_phys.py    Real | Model 전체 에피소드 롤아웃의 GIF·mp4 와 Real / Model / Recon 격자 그림 (저장된 프레임만 읽는다)
 │   ├── pusht_goal_overlay.py  예전 PushT 평가 영상을 지금 형식으로 (2배 확대): 목표 칸 이미지에서 맞춘 목표 블록 윤곽, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── pointmaze_goal_overlay.py  예전 PointMaze 평가 영상을 지금 형식으로 (2배 확대): 목표 위치(plan_targets.pkl 의 state_g) 원, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── reformat_eval_videos.py    예전 평가 영상을 지금 형식으로, 목표 표시 없이 (Wall 등): Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
