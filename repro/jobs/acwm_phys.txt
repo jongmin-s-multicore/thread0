@@ -1,0 +1,19 @@
+# ACWM-Phys Cloth Move / Push Sand / Stack Cube 본 학습과 평가 (파일럿 repro/jobs/acwm_phys_pilot.txt 뒤). 형식은 queue/scheduler.py 머리말.
+#   bash repro/queue/start.sh repro/jobs/acwm_phys.txt
+# 공통: Pour Water B (train_pw_h1f5) 와 같은 설정 — frameskip 5, num_hist 1, predictor lr 5e-5 (논문 Table 12), 배치 24.
+# epoch 수는 환경마다 슬라이스 수가 달라서 optimizer step 이 Pour Water B (64,170) 와 비슷하도록 정했다:
+#   Cloth Move 4,125 it/epoch × 15 = 61,875,  Push Sand 3,611 × 18 = 64,998,  Stack Cube 2,485 × 25 = 62,125.
+# 평가(eval_acwm_phys.py): 마지막 체크포인트의 한 스텝·열린 루프 롤아웃·전체 에피소드·action 민감도·환경별 물리량, 기준선 포함.
+train_cloth_h1f5  train env=acwm_cloth_move frameskip=5 num_hist=1 training.epochs=15 training.save_every_x_epoch=5 training.predictor_lr=5e-5 training.batch_size=24
+train_sand_h1f5   train env=acwm_push_sand  frameskip=5 num_hist=1 training.epochs=18 training.save_every_x_epoch=6 training.predictor_lr=5e-5 training.batch_size=24
+train_stack_h1f5  train env=acwm_stack_cube frameskip=5 num_hist=1 training.epochs=25 training.save_every_x_epoch=5 training.predictor_lr=5e-5 training.batch_size=24
+pq_cloth_h1f5     cmd after=train_cloth_h1f5 python $THREAD0/repro/eval/eval_acwm_phys.py $DINO_TRAIN train_cloth_h1f5 $DINO_WORK/results/acwm_phys/cloth_h1f5
+pq_sand_h1f5      cmd after=train_sand_h1f5  python $THREAD0/repro/eval/eval_acwm_phys.py $DINO_TRAIN train_sand_h1f5  $DINO_WORK/results/acwm_phys/sand_h1f5
+pq_stack_h1f5     cmd after=train_stack_h1f5 python $THREAD0/repro/eval/eval_acwm_phys.py $DINO_TRAIN train_stack_h1f5 $DINO_WORK/results/acwm_phys/stack_h1f5
+# 물리량(색 마스크로 잰 천·모래·큐브)과 정성 비교 영상. 평가가 저장한 프레임만 읽는다 (GPU 를 쓰지 않는다).
+quant_cloth_h1f5  cmd after=pq_cloth_h1f5 python $THREAD0/repro/eval/eval_acwm_phys_quant.py $DINO_TRAIN train_cloth_h1f5 $DINO_WORK/results/acwm_phys/cloth_h1f5
+quant_sand_h1f5   cmd after=pq_sand_h1f5  python $THREAD0/repro/eval/eval_acwm_phys_quant.py $DINO_TRAIN train_sand_h1f5  $DINO_WORK/results/acwm_phys/sand_h1f5
+quant_stack_h1f5  cmd after=pq_stack_h1f5 python $THREAD0/repro/eval/eval_acwm_phys_quant.py $DINO_TRAIN train_stack_h1f5 $DINO_WORK/results/acwm_phys/stack_h1f5
+render_cloth_h1f5 cmd after=quant_cloth_h1f5 python $THREAD0/repro/eval/render_acwm_phys.py $DINO_WORK/results/acwm_phys/cloth_h1f5 $DINO_WORK/results/acwm_phys/figs/cloth_h1f5
+render_sand_h1f5  cmd after=quant_sand_h1f5  python $THREAD0/repro/eval/render_acwm_phys.py $DINO_WORK/results/acwm_phys/sand_h1f5  $DINO_WORK/results/acwm_phys/figs/sand_h1f5
+render_stack_h1f5 cmd after=quant_stack_h1f5 python $THREAD0/repro/eval/render_acwm_phys.py $DINO_WORK/results/acwm_phys/stack_h1f5 $DINO_WORK/results/acwm_phys/figs/stack_h1f5

@@ -1,0 +1,7 @@
+# ACWM-Phys Cloth Move / Push Sand / Stack Cube 파일럿: 학습 에피소드 60개(학습 54 / 검증 6)로 3 epoch. 형식은 queue/scheduler.py 머리말.
+#   bash repro/queue/start.sh repro/jobs/acwm_phys_pilot.txt
+# 본 학습(repro/jobs/acwm_phys.txt)과 설정이 같고 데이터만 줄였다. iteration 당 시간·GPU 메모리를 재고,
+# 검증·열린 루프 롤아웃·체크포인트 저장까지 끝나는지, 검증 잠재 손실이 내려가는지 본다.
+train_cloth_pilot  train env=acwm_cloth_move env.dataset.n_rollout=60 frameskip=5 num_hist=1 training.epochs=3 training.save_every_x_epoch=3 training.predictor_lr=5e-5 training.batch_size=24
+train_sand_pilot   train env=acwm_push_sand  env.dataset.n_rollout=60 frameskip=5 num_hist=1 training.epochs=3 training.save_every_x_epoch=3 training.predictor_lr=5e-5 training.batch_size=24
+train_stack_pilot  train env=acwm_stack_cube env.dataset.n_rollout=60 frameskip=5 num_hist=1 training.epochs=3 training.save_every_x_epoch=3 training.predictor_lr=5e-5 training.batch_size=24
