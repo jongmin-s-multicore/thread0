@@ -4,6 +4,7 @@
 
 - 모델·데이터·하이퍼파라미터·평가 프로토콜·upstream 과 다른 점: [SETTINGS.md](SETTINGS.md)
 - 결과와 해석: [이슈](https://github.com/jongmin-s-multicore/thread0/issues)
+- ACWM-Phys 실험과 겹치는 선행연구 조사: [PRIOR_WORK.md](PRIOR_WORK.md)
 
 Reacher, 일반화 환경(WallRandom·PushObj·GranularRandom), 다른 모델 베이스라인은 실행하지 않았다. 데이터나 구현이 공개되지 않았거나 코드가 더 필요하기 때문이다. 인코더 비교(Table 2)도 이번에는 실행하지 않았다 ([SETTINGS.md §1](SETTINGS.md#1-구성)).
 

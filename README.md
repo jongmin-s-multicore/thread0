@@ -19,6 +19,7 @@ In every clip the left half is the real video and the right half is the model. T
 - Results: [summary](#summary) and [tables](#acwm-phys-results) below
 - How to run: [Reproduce the ACWM-Phys experiments](#reproduce-the-acwm-phys-experiments)
 - Settings and data conventions (Korean): [repro/SETTINGS.md](repro/SETTINGS.md) §7 (Pour Water) and §8 (the other three)
+- Prior work on DINO-WM, physics and InD/OoD evaluation (Korean): [repro/PRIOR_WORK.md](repro/PRIOR_WORK.md)
 
 The repository of this branch reproduces the planning benchmarks of the DINO-WM paper. The reproduction part is unchanged on this branch and starts at [thread0: DINO-WM reproduction](#thread0-dino-wm-reproduction) further down.
 
