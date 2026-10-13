@@ -19,6 +19,25 @@ from einops import rearrange
 from .traj_dset import TrajDataset, TrajSlicerDataset, split_traj_datasets
 
 
+def load_actions(data_dir, cam_action):
+    """Raw actions of a rendered set: (N, T, 4), or (N, T, 7) with the camera pose delta appended."""
+    actions = torch.from_numpy(np.load(Path(data_dir) / "actions.npy")).float()
+    if cam_action:
+        pose = torch.from_numpy(np.load(Path(data_dir) / "cam_pose.npy")).float()
+        delta = torch.zeros_like(pose)
+        delta[:, :-1] = pose[:, 1:] - pose[:, :-1]
+        # no frame after the last step: reuse the previous delta
+        delta[:, -1] = delta[:, -2]
+        actions = torch.cat([actions, delta], dim=-1)
+    return actions
+
+
+def action_stats(actions):
+    """Mean and std used to normalize actions."""
+    flat = actions.reshape(-1, actions.shape[-1])
+    return flat.mean(dim=0), flat.std(dim=0) + 1e-6
+
+
 class DeformCamDataset(TrajDataset):
     def __init__(
         self,
@@ -37,14 +56,7 @@ class DeformCamDataset(TrajDataset):
 
         # (N, T, H, W, 3) uint8, memory-mapped
         self.frames = np.load(self.data_path / "frames.npy", mmap_mode="r")
-        self.actions = torch.from_numpy(np.load(self.data_path / "actions.npy")).float()
-        if cam_action:
-            pose = torch.from_numpy(np.load(self.data_path / "cam_pose.npy")).float()
-            delta = torch.zeros_like(pose)
-            delta[:, :-1] = pose[:, 1:] - pose[:, :-1]
-            # no frame after the last step: reuse the previous delta
-            delta[:, -1] = delta[:, -2]
-            self.actions = torch.cat([self.actions, delta], dim=-1)
+        self.actions = load_actions(self.data_path, cam_action)
 
         n = n_rollout if n_rollout else len(self.actions)
         self.actions = self.actions[:n]
@@ -59,9 +71,7 @@ class DeformCamDataset(TrajDataset):
         self.proprio_dim = 1
 
         if normalize_action:
-            flat = self.actions.reshape(-1, self.action_dim)
-            self.action_mean = flat.mean(dim=0)
-            self.action_std = flat.std(dim=0) + 1e-6
+            self.action_mean, self.action_std = action_stats(self.actions)
         else:
             self.action_mean = torch.zeros(self.action_dim)
             self.action_std = torch.ones(self.action_dim)

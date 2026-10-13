@@ -38,7 +38,7 @@ from omegaconf import OmegaConf
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from datasets.deformable_cam_dset import DeformCamDataset  # noqa: E402
+from datasets.deformable_cam_dset import action_stats, load_actions  # noqa: E402
 from datasets.img_transforms import default_transform  # noqa: E402
 from plan import load_model  # noqa: E402
 
@@ -77,13 +77,13 @@ class Model:
         ds = cfg.env.dataset
         self.cam_action = bool(ds.get("cam_action", False))
         self.train_variant = ds.get("variant", "fixed")
-        # Action statistics of the training data. Push statistics are the same for all
+        # Action statistics of the training data, from actions.npy and cam_pose.npy of the
+        # training set (frames.npy is not needed). Push statistics are the same for all
         # variants. For a model trained on the original dataset, the `move` set is used.
-        stats = DeformCamDataset(
-            data_path=data_root, object_name=obj, normalize_action=True, cam_action=self.cam_action,
-            variant=self.train_variant if self.train_variant != "fixed" else "move",
+        variant = self.train_variant if self.train_variant != "fixed" else "move"
+        self.action_mean, self.action_std = action_stats(
+            load_actions(Path(data_root) / obj / variant, self.cam_action)
         )
-        self.action_mean, self.action_std = stats.action_mean, stats.action_std
         ckpt = path / "checkpoints" / f"model_{epoch}.pth"
         if not ckpt.exists():
             raise FileNotFoundError(ckpt)
