@@ -8,6 +8,54 @@ This branch measures the next-frame prediction error of DINO-WM on Rope and Gran
 
 Rows 1 and 3 are rendered from the dataset camera. Rows 2 and 4 are the same episodes rendered from a moving camera. In this example the camera rotates 127° around the table.
 
+## Results
+
+One-step predictions under a moving camera, decoded to pixels. The first panel is the real frame. The other panels are the five models.
+
+![Rope, moving camera: real frames and one-step predictions of the five models](assets/occlusion_camera_rope_move_1step.gif)
+
+![Granular, moving camera: real frames and one-step predictions of the five models](assets/occlusion_camera_granular_move_1step.gif)
+
+The numbers are the MSE between the predicted and the actual DINOv2 features of the next frame. Lower is better. "Copy" uses the current frame as the prediction. All models are at 50 epochs and are evaluated on the 100 validation episodes.
+
+Rope:
+
+| Test camera | Copy | `fixed` | `static` | `move-blind-h1` | `move-blind-h2` | `move-told-h1` |
+|---|---|---|---|---|---|---|
+| E-fixed | 0.393 | 0.083 | 0.168 | 0.886 | 0.709 | 0.433 |
+| E-static | 0.361 | 1.861 | 0.174 | 0.797 | 0.641 | 0.501 |
+| E-move | 1.389 | 2.101 | 1.143 | 0.990 | 0.557 | 0.495 |
+| E-move-fast | 2.321 | 2.614 | 2.091 | 1.732 | 1.068 | 1.083 |
+
+Granular:
+
+| Test camera | Copy | `fixed` | `static` | `move-blind-h1` | `move-blind-h2` | `move-told-h1` |
+|---|---|---|---|---|---|---|
+| E-fixed | 0.284 | 0.145 | 0.178 | 0.974 | 0.606 | 0.454 |
+| E-static | 0.274 | 1.142 | 0.185 | 0.782 | 0.639 | 0.493 |
+| E-move | 1.285 | 1.582 | 1.132 | 1.019 | 0.598 | 0.514 |
+| E-move-fast | 2.204 | 2.190 | 2.037 | 1.642 | 1.164 | 1.348 |
+
+E-move, Rope / Granular:
+
+| Model | Predictions closest to the real next frame | Error after 5 open-loop steps |
+|---|---|---|
+| Copy | | 3.512 / 3.383 |
+| `fixed` | 3% / 0% | 3.785 / 3.393 |
+| `static` | 0% / 0% | 3.273 / 3.090 |
+| `move-blind-h1` | 32% / 30% | 2.765 / 2.727 |
+| `move-blind-h2` | 76% / 60% | 1.706 / 1.840 |
+| `move-told-h1` | 81% / 64% | 0.969 / 0.904 |
+
+"Closest to the real next frame" compares each prediction with three frames: the real next frame, a frame where the camera moved and the object did not, and a frame where the object moved and the camera did not.
+
+- The `fixed` model has a larger error than copy on every camera other than the dataset camera.
+- With the camera motion given as input, the error under a moving camera is 0.36 (Rope) and 0.40 (Granular) of the copy error.
+- With two context frames and no camera input, the one-step error is 0.557 and 0.598. After 5 open-loop steps it is about twice the error of `move-told-h1`.
+- The three models trained with a moving camera have a larger error than copy when the camera is static.
+
+Videos (80 per object, Google Drive): [Rope](https://drive.google.com/drive/folders/1Jw2G-sCRNJEmS_Dzhj0DGh5E-5GVqjyl), [Granular](https://drive.google.com/drive/folders/1iuVgu2i4MLJBcNp3O8Bj-Gy5os3czb-F).
+
 ## Setup
 
 | Item | Description |
@@ -15,8 +63,6 @@ Rows 1 and 3 are rendered from the dataset camera. Rows 2 and 4 are the same epi
 | Environments | Rope, Granular (NVIDIA FleX) |
 | Camera motion | Rotation around the table with changes in height and distance. The velocity is constant within an episode. |
 | Data | The dataset stores the particle positions of every frame. Frames are re-rendered from these positions with a different camera. States, actions and the train/validation split are the same as in the original dataset. |
-| Metric | MSE between the predicted and the actual DINOv2 features of the next frame |
-| Status (2026-10-13) | Data rendered. 8 models in training. |
 | Details | [PLAN_camera_motion.md](PLAN_camera_motion.md) (Korean) |
 
 Models, per object:
@@ -40,18 +86,40 @@ Test cameras:
 | E-move | moving, 2 to 8° per step |
 | E-move-fast | moving, 10 to 15° per step |
 
-## Preliminary result
+## How to run
 
-Existing `fixed` models without retraining, 40 validation episodes. "Copy" is the error when the current frame is used as the prediction.
+Install the environment and the Rope and Granular data as described in [repro/README.md](repro/README.md). Rendering needs PyFleX. Training and evaluation do not.
 
-| Test camera | Rope prediction | Rope copy | Granular prediction | Granular copy |
-|---|---|---|---|---|
-| Dataset camera | 0.077 | 0.390 | 0.145 | 0.307 |
-| Static, rotated 5° | 0.939 | 0.387 | 0.632 | 0.297 |
-| Static, rotated 45° | 2.106 | 0.303 | 1.322 | 0.275 |
-| Moving, 2° per step | 1.578 | 0.837 | 1.152 | 0.770 |
+Render the training sets and the evaluation sets. Repeat with `--object granular`.
 
-With the camera rotated by 5°, the prediction error is larger than the copy error for both objects. The full table is in [PLAN_camera_motion.md](PLAN_camera_motion.md), section 3. Results of the trained models will be posted as an issue.
+```bash
+source repro/env.sh
+python scripts/render_camera_data.py --object rope --variant static_rand
+python scripts/render_camera_data.py --object rope --variant move
+for v in fixed static_rand move move_fast; do python scripts/render_camera_data.py --object rope --variant $v --episodes val --counterfactual --name eval_$v; done
+```
+
+Train one model. The command below is `move-told-h1`.
+
+```bash
+python train.py env=deformable_cam env.dataset.object_name=rope env.kwargs.object_name=rope env.dataset.variant=move env.dataset.cam_action=true frameskip=1 num_hist=1 training.epochs=50 training.save_every_x_epoch=10 ckpt_base_path=$DINO_TRAIN hydra.run.dir=$DINO_TRAIN/outputs/cam_rope_move_told_h1
+```
+
+Settings of the four models and GPU memory at batch 32:
+
+| Model | Settings that differ | GPU memory |
+|---|---|---|
+| `static` | `env.dataset.variant=static_rand num_hist=1 has_decoder=False model.train_decoder=False` | about 4 GB |
+| `move-blind-h1` | `env.dataset.variant=move num_hist=1 has_decoder=False model.train_decoder=False` | about 4 GB |
+| `move-blind-h2` | `env.dataset.variant=move num_hist=2 has_decoder=False model.train_decoder=False` | about 9 GB |
+| `move-told-h1` | `env.dataset.variant=move env.dataset.cam_action=true num_hist=1` (with decoder) | about 12 GB |
+
+Evaluate and make the videos. Evaluation of five models uses about 4 GB of GPU memory.
+
+```bash
+python scripts/eval_camera_pred.py --object rope --models fixed=train_rope@50 static=cam_rope_static_h1@50 blind_h1=cam_rope_move_blind_h1@50 blind_h2=cam_rope_move_blind_h2@50 told_h1=cam_rope_move_told_h1@50 --decoder cam_rope_move_told_h1@50 --conds eval_fixed eval_static_rand eval_move eval_move_fast --out $DINO_WORK/results/camera_motion/eval_rope.json
+python scripts/make_camera_videos.py --object rope --models fixed=train_rope@50 static=cam_rope_static_h1@50 blind_h1=cam_rope_move_blind_h1@50 blind_h2=cam_rope_move_blind_h2@50 told_h1=cam_rope_move_told_h1@50 --decoder cam_rope_move_told_h1@50 --conds eval_fixed eval_static_rand eval_move eval_move_fast --out $DINO_RUNS/camera_motion/videos/rope
+```
 
 ## Code
 
@@ -61,6 +129,7 @@ With the camera rotated by 5°, the prediction error is larger than the copy err
 | `scripts/render_camera_data.py` | re-rendering |
 | `datasets/deformable_cam_dset.py`, `conf/env/deformable_cam.yaml` | dataset and config for training |
 | `scripts/eval_camera_pred.py` | evaluation |
+| `scripts/make_camera_videos.py` | videos |
 
 ## Other files on this branch
 
