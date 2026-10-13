@@ -70,3 +70,15 @@ git diff --cached | grep -nE '100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|192\
 - 경로는 한 곳(`repro/env.sh`)에서 정하고 환경변수로 덮어쓸 수 있게 한다. 머신마다 다른 값(GPU 번호, 설치 경로, 메모리 조건)은 코드에 하드코딩하지 않고 `.claude/env.local.sh` 와 overlay 파일에 둔다. GPU 환경에 맞춘 코드는 환경 브랜치에 둔다.
 - 문서는 한국어로, 수사 없이 기술 용어로 쓴다. 루트 `README.md` 만 영어로 쓴다. 수치에는 출처(run.yaml, 코드, 로그)가 있어야 한다. 확인하지 않은 절차는 "실행해 보지 않았다"고 적는다.
 - 에이전트는 사람이 요청하지 않은 브랜치 삭제·강제 push·히스토리 수정을 하지 않는다.
+
+## 6. Colab 에서 돌리기
+
+로컬 GPU 가 차 있거나 더 큰 GPU 가 필요할 때는 Google Colab 을 **`colab` CLI** (`google-colab-cli`, 없으면 `uv tool install google-colab-cli`) 로 쓴다. 세션 생성·코드 실행·파일 전송을 터미널에서 다 할 수 있으므로, 사람에게 브라우저로 Colab 을 열어 달라고 하지 않는다.
+
+- **사용법은 CLI 안에 있다**: `colab skill` (에이전트용 요약), `colab readme`, `colab help <명령>`. 처음 쓸 때 `colab skill` 을 먼저 읽는다.
+- **GPU**: `colab new -s <세션 이름> --gpu G4`. `G4` 가 NVIDIA RTX PRO 6000 (Blackwell, 96 GB) 이다. 그 밖에 `T4` `L4` `A100` `H100`. 이름을 틀리면 조용히 A100 이 잡히므로 만든 뒤 `colab status -s <이름>` 과 VM 의 `nvidia-smi` 로 확인한다.
+- **PyTorch**: Blackwell 은 PyTorch 2.7 이상(CUDA 12.8)이 필요하다. 이 레포의 고정 환경(`environment.yaml`, torch 2.3.0+cu121)은 G4 에서 돌지 않는다. Colab VM 에 깔려 있는 Python·PyTorch 를 쓰고 필요한 패키지만 더 설치한다. `plan.py`·`train.py` 는 mujoco-py 를 import 하므로 VM 에서는 그것을 거치지 않는 스크립트를 쓴다 (예: `repro/colab/predictor_long.py`).
+- **실행은 사용자 계정의 tmux 세션 안에서 한다**: `tmux new -d -s <이름> '<명령> 2>&1 | tee <로그 파일>'`. 에이전트의 백그라운드 작업으로 띄우지 않는다. 사람이 `tmux attach -t <이름>` 으로 볼 수 있고 에이전트 세션이 끝나도 계속 돈다.
+- **코드 실행**: `colab exec -s <이름> -f script.py` (로컬 파일을 VM 의 커널에서 실행, 작업 디렉토리 `/content`). 커널 상태는 호출 사이에 유지된다. 파일은 `colab upload` / `colab download`. `colab drivemount`·`colab auth`·대화형 `repl`/`console` 은 사람이 터미널에 있어야 하므로 에이전트가 쓰지 않는다.
+- **데이터·체크포인트**: 공개 데이터는 VM 에서 직접 받고 (`repro/setup/download_acwm_phys.py` 등), 체크포인트는 필요한 가중치만 올린다. VM 은 세션을 끝내면 사라지므로 결과는 끝내기 전에 내려받는다.
+- **비용**: 세션은 compute unit 을 쓴다. 시작 전후에 `colab usage` 로 잔액과 시간당 사용량을 보고 사람에게 알린다. 일이 끝나면 반드시 `colab stop -s <이름>` 하고 `colab sessions` 로 남은 세션이 없는지 확인한다.
