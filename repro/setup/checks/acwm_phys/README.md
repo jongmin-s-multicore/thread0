@@ -1,6 +1,6 @@
 # ACWM-Phys Cloth Move · Push Sand · Stack Cube 데이터 검사
 
-`repro/SETTINGS.md` §8.1–§8.3 에 적은 데이터 사실(프레임과 action 의 정렬, OoD 의 크기, frameskip·num_hist 근거, 쌓임 판정)을 낸 스크립트다. 학습·평가에는 필요 없다. 데이터를 받은 뒤 (`python repro/setup/download_acwm_phys.py`) 레포 루트에서 돌린다.
+이 폴더의 스크립트는 `repro/SETTINGS.md` §8.1–§8.3 에 적은 데이터 사실(프레임과 action 의 정렬, OoD 의 크기, frameskip·num_hist 근거, 쌓임 판정)을 계산한다. 학습·평가에는 필요 없다. 데이터를 받은 뒤 (`python repro/setup/download_acwm_phys.py`) 레포 루트에서 실행한다.
 
 ```bash
 source repro/env.sh
@@ -22,4 +22,4 @@ python repro/setup/checks/acwm_phys/copy_baseline.py $DATASET_DIR/acwm_phys $OUT
 | `history.py` | §8.2: num_hist 근거 |
 | `stack_rule.py` | §8.3: 쌓임 판정이 `success` 와 98.8 % 일치 |
 
-색 마스크의 HSV 범위는 원본 프레임에서 정했다. 사람이 영상을 보고 확인한 것(빠른 움직임 이상치가 천이 미끄러지는 장면이라는 것 등)은 스크립트에 없다.
+색 마스크의 HSV 범위는 원본 프레임에서 정했다. 사람이 영상을 보고 확인한 내용은 스크립트에 없다. 빠른 움직임 이상치가 천이 미끄러지는 장면이라는 확인이 그 예다.

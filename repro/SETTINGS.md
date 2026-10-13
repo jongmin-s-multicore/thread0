@@ -151,43 +151,43 @@ GPU 환경에 맞춘 메모리·속도 수정(예: 24 GB GPU 용 attention·청�
 
 ## 7. 추가 실험: ACWM-Phys Pour Water (논문 밖)
 
-DINO-WM 논문의 벤치마크가 아니다. 물리 영상과 action 이 같이 있는 공개 데이터 [ACWM-Phys](https://arxiv.org/abs/2605.08567) (HF `t1an/ACWM-Phys`, 커밋 `4017e5f`)의 Pour Water 로 DINO-WM 의 예측 품질을 잰다. 시뮬레이터가 공개되지 않아 planning 은 돌릴 수 없다 (목표·보상·상태도 없다). 결과는 이 문서가 아니라 이슈로 올린다 (AGENTS.md §1).
+이 실험은 DINO-WM 논문의 벤치마크가 아니다. 물리 영상과 action 이 같이 있는 공개 데이터 [ACWM-Phys](https://arxiv.org/abs/2605.08567) (HF `t1an/ACWM-Phys`, 커밋 `4017e5f`)의 Pour Water 로 DINO-WM 의 예측 품질을 잰다. 시뮬레이터가 공개되지 않아 planning 은 실행할 수 없다. 목표·보상·상태도 없다. 결과는 이슈로 올린다 (AGENTS.md §1).
 
 ### 7.1 데이터
 
-- 컵을 기울여 옆 상자에 물을 붓는 PyFleX 장면. 에피소드마다 300프레임(360×360, 10 fps)과 action [300, 4]. action 차원 0·2 는 모든 에피소드에서 0 이라 빼고 2차원으로 쓴다. `metadata.pt` 는 pickle 이라 `torch.load(..., weights_only=True)` 로만 읽는다.
-- 쓰는 split: `ind_train` 1000개에서 `episode_60`–`episode_79` 20개를 뺀 980개 (train/val 90/10, seed 42 = 882/98), `ind_test` 50, `ood_test` 50. 뺀 20개는 첫 프레임에서 물이 컵 바닥에 얇게 있고 입자가 흩어져 있으며(최대 물덩어리가 물 픽셀의 0.25–0.89, 나머지 980개는 0.94 이상) 끝 프레임에 상자 바닥 물이 거의 없다(0–71 px, 나머지 중앙값 4,944). 붓는 장면이 없다. 해시·디코딩·길이는 정상이라 파일 검사로는 안 잡히고 영상을 봐야 한다. 제외 목록은 `conf/env/acwm_pour_water.yaml`.
-- `ood_test` 는 물 양이 다르다. 첫 프레임의 물 색 픽셀 수(W0, 360×360, HSV hue 98–110·S>70·V>100)가 정상 학습 980개는 2,351–6,202 인데 `ood_test` 는 낮음 26개 1,675–2,795, 높음 24개 5,360–8,366 으로 갈려 있다 (평가는 W0 4,000 으로 나눈다).
-- 정렬: a[t] 가 프레임 t→t+1 전이를 만든다 (DINO-WM 슬라이서 규약과 같다). 주황색 팔 중심 속도를 a[t+j] (j=−4..+4)에 회귀하면 j=0 의 주 계수가 0.43–0.88 이고 j=±1..3 은 모두 0.07 이하다 (에피소드 160개). 팔만 본 것이고 물은 확인하지 않았다.
-- 로더 `datasets/acwm_pour_water_dset.py`, 설정 `conf/env/acwm_pour_water.yaml` (`env=acwm_pour_water`). 슬라이스가 쓰는 프레임만 decord 로 디코딩한다 (`DeformDataset`·`TrajSlicerDataset` 는 샘플마다 궤적 전체를 읽는다). action 은 분할 전 980개 통계로 z-score, proprio·state 는 Rope 처럼 더미.
+- 컵을 기울여 옆 상자에 물을 붓는 PyFleX 장면이다. 에피소드마다 300프레임(360×360, 10 fps)과 action [300, 4] 가 있다. action 차원 0·2 는 모든 에피소드에서 0 이라 빼고 2차원으로 쓴다. `metadata.pt` 는 pickle 이라 `torch.load(..., weights_only=True)` 로만 읽는다.
+- 쓰는 split: `ind_train` 1000개에서 `episode_60`–`episode_79` 20개를 뺀 980개 (train/val 90/10, seed 42 = 882/98), `ind_test` 50, `ood_test` 50. 뺀 20개는 첫 프레임에서 물이 컵 바닥에 얇게 있고 입자가 흩어져 있다 (최대 물덩어리가 물 픽셀의 0.25–0.89, 나머지 980개는 0.94 이상). 끝 프레임에는 상자 바닥에 물이 거의 없다 (0–71 px, 나머지 중앙값 4,944). 붓는 장면이 없다. 해시·디코딩·길이는 정상이라 파일 검사로는 구분되지 않는다. 영상을 봐야 구분된다. 제외 목록은 `conf/env/acwm_pour_water.yaml` 에 있다.
+- `ood_test` 는 물 양이 다르다. 첫 프레임의 물 색 픽셀 수(W0, 360×360, HSV hue 98–110·S>70·V>100)는 정상 학습 980개에서 2,351–6,202 다. `ood_test` 는 낮음 26개가 1,675–2,795, 높음 24개가 5,360–8,366 이다. 평가는 W0 4,000 을 기준으로 나눈다.
+- 정렬: a[t] 가 프레임 t→t+1 전이를 만든다. DINO-WM 슬라이서 규약과 같다. 주황색 팔 중심 속도를 a[t+j] (j=−4..+4)에 회귀하면 j=0 의 주 계수가 0.43–0.88 이고 j=±1..3 은 모두 0.07 이하다 (에피소드 160개). 이 회귀는 팔에 대해서만 했다. 물은 확인하지 않았다.
+- 로더는 `datasets/acwm_pour_water_dset.py`, 설정은 `conf/env/acwm_pour_water.yaml` 이다 (`env=acwm_pour_water`). 슬라이스가 쓰는 프레임만 decord 로 디코딩한다. `DeformDataset`·`TrajSlicerDataset` 는 샘플마다 궤적 전체를 읽는다. action 은 분할 전 980개 통계로 z-score 정규화한다. proprio·state 는 Rope 처럼 더미다.
 
 ### 7.2 학습
 
 | 항목 | 값 |
 |---|---|
-| 모델·옵티마이저 | §2 와 같다 (DINOv2 ViT-S/14 동결, ViT predictor, VQ-VAE 디코더), predictor lr 5e-5 · decoder 3e-4 · action encoder 5e-4 (논문 Table 12) |
+| 모델·옵티마이저 | §2 와 같다 (DINOv2 ViT-S/14 동결, ViT predictor, VQ-VAE 디코더). lr 은 predictor 5e-5 · decoder 3e-4 · action encoder 5e-4 다 (논문 Table 12) |
 | 입력·frameskip | 224, frameskip 5 (300프레임 → 60 스텝) |
-| 모델 A / B | num_hist 3 (DINO-WM 기본) / num_hist 1 (논문 Rope·Granular 설정, ACWM-DiT 가 첫 프레임 하나로 예측하는 조건과 같다) |
-| epoch | 6 (epoch = 슬라이스 전부 한 번: A 247,842개, B 256,662개) |
-| 배치 | 논문 32. num_hist 3 은 24 GB GPU 에서 OOM 이라 24 로 낮췄다 (이 실험의 브랜치 `hanbin5/water`) |
-| 작업 | `repro/jobs/pour_water_pilot.txt` (에피소드 60개·3 epoch 파일럿), `repro/jobs/pour_water.txt` (본 학습 A·B 와 평가). 둘 다 배치 24 |
+| 모델 A / B | num_hist 3 (DINO-WM 기본) / num_hist 1 (논문 Rope·Granular 설정). B 는 ACWM-DiT 가 첫 프레임 하나로 예측하는 조건과 같다 |
+| epoch | 6. epoch 하나는 모든 슬라이스를 한 번 쓴다 (A 247,842개, B 256,662개) |
+| 배치 | 논문은 32 다. num_hist 3 은 24 GB GPU 에서 OOM 이라 24 로 낮췄다 (이 실험의 브랜치 `hanbin5/water`) |
+| 작업 | `repro/jobs/pour_water_pilot.txt` (에피소드 60개·3 epoch 파일럿), `repro/jobs/pour_water.txt` (본 학습 A·B 와 평가). 둘 다 배치 24 다 |
 
 ### 7.3 평가 (`repro/eval/eval_pour_water.py`)
 
-세트는 검증 98개, `ind_test`, `ood_test` (낮음·높음). 지표마다 에피소드 단위 bootstrap 95 % 구간. 기준선은 모델 없이 계산한다: copy_last(마지막 문맥 프레임), recon_copy(그 프레임을 인코더·디코더에 통과), recon_ceiling(정답 프레임을 인코더·디코더에 통과), copy_first(창의 첫 프레임), time_mean(학습 100개의 시각별 평균 영상). 디코더 오차를 모델 오차와 분리하려고 recon 두 개를 둔다 (Rope·Granular 는 recon LPIPS 가 예측 LPIPS 의 91·96 % 였다).
+세트는 검증 98개, `ind_test`, `ood_test` (낮음·높음)다. 지표마다 에피소드 단위 bootstrap 95 % 구간을 낸다. 기준선은 모델 없이 계산한다. 기준선은 copy_last(마지막 문맥 프레임), recon_copy(그 프레임을 인코더·디코더에 통과), recon_ceiling(정답 프레임을 인코더·디코더에 통과), copy_first(창의 첫 프레임), time_mean(학습 100개의 시각별 평균 영상)이다. 디코더 오차를 모델 오차와 분리하려고 recon 두 개를 둔다. Rope·Granular 는 recon LPIPS 가 예측 LPIPS 의 91·96 % 였다.
 
-- **한 스텝**: `eval_pred_quality.py` 와 같은 계산 (LPIPS-VGG, SSIM, MSE, 224, [−1, 1]). 잠재 MSE 와 copy-latent 기준선도.
-- **열린 루프 롤아웃**: ACWM-Phys `eval.py` 와 같은 37프레임 창, 시작 `linspace(0, 263, 10)`. 프레임 간격 frameskip 로 창의 프레임 k=num_hist.. 를 예측. 같은 지표, 잠재 MSE·코사인, ACWM 방식 지표(240×240, [0, 1], MSE·M-MSE·PSNR·skimage SSIM, `compute_metrics` 와 같은 식)를 구한다. 표는 창의 프레임 3 이상에서만 모아 num_hist 가 다른 모델을 같은 프레임으로 비교한다. 창 시작 시각(<80 / 80–200 / ≥200)으로도 나눈다.
-- **전체 에피소드**: 처음 num_hist 프레임과 모든 action 으로 60 스텝을 굴린 오차 곡선, 끝 구간(프레임 250 이상) 상자 바닥(360px 기준 x 140–310, y 225–300)의 물 색 픽셀 수를 정답과 비교. 정답을 재구성한 영상에서 같은 양의 상대 오차가 10 % 를 넘으면 신뢰하지 않는다.
-- **action 민감도**: 같은 창을 다음 에피소드의 action / 정규화한 action 0(= 학습 평균 action, 이동 차원에서 "움직임 없음"과 0.09 표준편차 차이)으로 롤아웃해 악화를 본다. 기울기 action 은 처음 약 80 스텝 동안 에피소드 간 거의 같고(이동 action 은 처음부터 다르다) 그래서 창 시작 시각(t0 < 80 / 80–200 / ≥ 200)으로 나눠 본다.
+- 한 스텝: `eval_pred_quality.py` 와 같은 계산이다 (LPIPS-VGG, SSIM, MSE, 224, [−1, 1]). 잠재 MSE 와 copy-latent 기준선도 계산한다.
+- 열린 루프 롤아웃: ACWM-Phys `eval.py` 와 같은 37프레임 창을 쓴다. 창 시작은 `linspace(0, 263, 10)` 이다. 프레임 간격 frameskip 로 창의 프레임 k=num_hist.. 를 예측한다. 같은 지표, 잠재 MSE·코사인, ACWM 방식 지표(240×240, [0, 1], MSE·M-MSE·PSNR·skimage SSIM, `compute_metrics` 와 같은 식)를 구한다. 표는 num_hist 가 다른 모델을 같은 프레임으로 비교하도록 창의 프레임 3 이상에서만 모은다. 창 시작 시각(<80 / 80–200 / ≥200)으로도 나눈다.
+- 전체 에피소드: 처음 num_hist 프레임과 모든 action 으로 60 스텝을 롤아웃해 오차 곡선을 구한다. 끝 구간(프레임 250 이상) 상자 바닥(360px 기준 x 140–310, y 225–300)의 물 색 픽셀 수를 정답과 비교한다. 정답을 재구성한 영상에서 같은 양의 상대 오차가 10 % 를 넘으면 신뢰하지 않는다.
+- action 민감도: 같은 창을 다음 에피소드의 action 과 정규화한 action 0 으로 각각 롤아웃해 지표가 얼마나 나빠지는지 본다. 두 번째 경우의 action 은 학습 평균 action 이고, 이동 차원에서 "움직임 없음"과 0.09 표준편차 차이다. 기울기 action 은 처음 약 80 스텝 동안 에피소드 간 거의 같다. 이동 action 은 처음부터 다르다. 이 때문에 창 시작 시각(t0 < 80 / 80–200 / ≥ 200)으로 나눠 본다.
 
-물 양은 `eval_pour_water_volume.py` 가 에피소드별로 따로 낸다 (화면 전체와 상자 바닥의 물 색 픽셀 수의 시간 곡선, 창 시작 t0 별 action 민감도). 그림은 `plot_pour_water.py`, 정성 비교는 `render_pour_water.py`.
+물 양은 `eval_pour_water_volume.py` 가 에피소드별로 따로 계산한다. 계산하는 값은 화면 전체와 상자 바닥의 물 색 픽셀 수의 시간 곡선, 창 시작 t0 별 action 민감도다. 그림은 `plot_pour_water.py`, 정성 비교는 `render_pour_water.py` 로 만든다.
 
-SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])가 정의가 달라 섞지 않는다. ACWM-DiT 논문 수치와는 프레임 부분집합(frameskip 5), 해상도, 모델이 달라 직접 비교하지 않고 같은 코드로 계산한 기준선 대비 비율로 본다. 평가 스크립트는 파일럿 체크포인트로만 돌려 봤고(롤아웃 첫 예측이 `train.py` 의 forward 와 잠재 6e-5 이내로 같다), 본 학습 결과는 이 문서 작성 시점에 없다.
+SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])가 정의가 다르다. 두 값은 섞지 않는다. ACWM-DiT 논문 수치와는 프레임 부분집합(frameskip 5), 해상도, 모델이 다르다. 논문 수치와는 비교하지 않는다. 같은 코드로 계산한 기준선 대비 비율로 본다. 평가 스크립트는 파일럿 체크포인트로만 실행해 봤다. 그 실행에서 롤아웃 첫 예측이 `train.py` 의 forward 와 잠재 6e-5 이내로 같았다. 본 학습 결과는 이 문서 작성 시점에 없다.
 
 ## 8. 추가 실험: ACWM-Phys Cloth Move · Push Sand · Stack Cube (논문 밖)
 
-§7 과 같은 데이터([ACWM-Phys](https://arxiv.org/abs/2605.08567), HF `t1an/ACWM-Phys`, 커밋 `4017e5f`)의 다른 세 환경으로 같은 질문을 본다: DINO-WM 이 학습 분포 안과 밖(OoD)에서 얼마나 예측하는가. 시뮬레이터가 없어 planning 은 돌리지 않는다. 결과 요약은 루트 `README.md`, 수치 JSON 과 영상은 거기 적은 Drive 폴더에 있다.
+§7 과 같은 데이터([ACWM-Phys](https://arxiv.org/abs/2605.08567), HF `t1an/ACWM-Phys`, 커밋 `4017e5f`)의 다른 세 환경에서도 DINO-WM 이 학습 분포 안과 밖(OoD)에서 얼마나 예측하는지 잰다. 시뮬레이터가 없어 planning 은 실행하지 않는다. 결과 요약은 루트 `README.md` 에 있다. 수치 JSON 과 영상은 그 README 에 적은 Drive 폴더에 있다.
 
 ### 8.1 데이터
 
@@ -199,35 +199,35 @@ SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])�
 | Push Sand | `particle/push_sand` | 1784 → 1605 / 179 | 100 | 100 | 64 | 304×512, 10 fps | 7 → 4차원 (다음 프레임 자세의 x, z, cos yaw, sin yaw) | 입자 약 2배 (첫 프레임 모래 픽셀 2.16배) |
 | Stack Cube | `rigid_dynamics/stack_cube` | 1373 → 1235 / 138 | 67 | 271 | 53–58 | 512×512, 20 fps (프레임 간격은 시뮬레이션 0.4 s) | 7차원 (말단 delta 6 + 그리퍼) | 노란 큐브 시작 위치가 학습 영역 밖 (up 68 / down 67 / left 69 / right 67) |
 
-학습 / 검증은 `ind_train` 을 무작위 0.9 / 0.1 (seed 42)로 나눈 것이다. 제외한 에피소드는 없다 (Pour Water 같은 깨진 에피소드를 찾지 못했다). 아래 확인은 `repro/setup/checks/acwm_phys/` 의 스크립트로 했다 (실행 순서는 그 폴더의 README.md).
+학습 / 검증은 `ind_train` 을 무작위 0.9 / 0.1 (seed 42)로 나눠 만들었다. 제외한 에피소드는 없다. Pour Water 같은 깨진 에피소드를 찾지 못했다. 아래 확인은 `repro/setup/checks/acwm_phys/` 의 스크립트로 했다. 실행 순서는 그 폴더의 README.md 에 있다.
 
-- **Cloth Move.** 그리퍼 공 2개가 천의 두 모서리를 잡고 구 위로 옮긴다. a[t] 가 프레임 t→t+1 을 만든다: 파란 공 중심 속도를 a[4:7][t+j] (j=−3..+3)에 회귀하면 j=0 계수 0.76–0.83, 나머지 0.05 이하, R² 0.98 (학습 400 에피소드). 모든 에피소드에서 처음 3개 action 이 0 이고 그동안 천이 자리를 잡는다. 학습·InD 는 천 크기가 하나뿐이고(프레임 3 의 천 픽셀 13,980–14,330 @512²) metadata 의 `cloth_dimx`·`cloth_dimy` 는 보이는 크기와 상관이 없다 (r ≈ 0.02).
-- **Push Sand.** 판으로 입자 더미를 세 번 민다. metadata 의 action 은 "프레임 t 의 밀판 자세" (x, 0.9, z, 쿼터니언 (0, qy, 0, qw)) 다: 밀판 막대의 화면 속도 c[t+1]−c[t] 는 a[t+1]−a[t] 와 맞는다 (j=0 계수 0.65, 나머지 0.04 이하, R² 0.88 / 0.85). 그래서 action t 로 **다음 프레임의 자세 a[t+1]** 를 쓴다 (에피소드당 action 63개). 쿼터니언 부호가 에피소드 안에서 뒤집히므로(에피소드의 28 %) 회전은 yaw = 2·atan2(qy, qw) 의 (cos, sin) 으로 준다. 304×512 프레임은 자르지 않고 224×224 로 줄인다 (`resize_transform`; 밀판이 화면 가장자리까지 간다).
-- **Stack Cube.** Franka 가 노란 큐브를 집어 초록 큐브 위에 쌓는다. a[t] 가 t→t+1 을 만든다: 팔 관절 변화 q[t+1]−q[t] 를 a[0:6][t+j] 에 회귀하면 j=0 이 가장 크고(단일 lag R² 0.78–0.86) 제어기 지연으로 a[t−1] 도 영향이 있다. `actions`(delta)가 `actions_abs` 차분보다 팔 움직임을 잘 설명해서(한 프레임 R² 0.85 대 0.50) `actions` 를 쓴다. 학습 에피소드의 27 % (373 / 1373)는 쌓기에 실패한 궤적이고 그대로 쓴다 (`success` 필드). `states` (45차원)에 큐브 위치가 있지만 모델 입력에는 쓰지 않는다. `video_path` 는 원 저장소의 절대경로라 파일 이름만 쓴다.
+- Cloth Move. 그리퍼 공 2개가 천의 두 모서리를 잡고 구 위로 옮긴다. a[t] 가 프레임 t→t+1 을 만든다. 파란 공 중심 속도를 a[4:7][t+j] (j=−3..+3)에 회귀하면 j=0 계수가 0.76–0.83, 나머지가 0.05 이하, R² 가 0.98 이다 (학습 400 에피소드). 모든 에피소드에서 처음 3개 action 이 0 이고 그동안 천이 자리를 잡는다. 학습·InD 는 천 크기가 하나다 (프레임 3 의 천 픽셀 13,980–14,330 @512²). metadata 의 `cloth_dimx`·`cloth_dimy` 는 보이는 크기와 상관이 없다 (r ≈ 0.02).
+- Push Sand. 판으로 입자 더미를 세 번 민다. metadata 의 action 은 "프레임 t 의 밀판 자세" (x, 0.9, z, 쿼터니언 (0, qy, 0, qw)) 다. 밀판 막대의 화면 속도 c[t+1]−c[t] 는 a[t+1]−a[t] 와 맞는다 (j=0 계수 0.65, 나머지 0.04 이하, R² 0.88 / 0.85). 이 때문에 action t 로 다음 프레임의 자세 a[t+1] 를 쓴다 (에피소드당 action 63개). 쿼터니언 부호가 에피소드 안에서 뒤집히므로(에피소드의 28 %) 회전은 yaw = 2·atan2(qy, qw) 의 (cos, sin) 으로 준다. 304×512 프레임은 자르지 않고 224×224 로 줄인다 (`resize_transform`). 밀판이 화면 가장자리까지 간다.
+- Stack Cube. Franka 가 노란 큐브를 집어 초록 큐브 위에 쌓는다. a[t] 가 t→t+1 을 만든다. 팔 관절 변화 q[t+1]−q[t] 를 a[0:6][t+j] 에 회귀하면 j=0 이 가장 크다 (단일 lag R² 0.78–0.86). 제어기 지연으로 a[t−1] 도 영향이 있다. `actions`(delta)가 `actions_abs` 차분보다 팔 움직임을 잘 설명해서(한 프레임 R² 0.85 대 0.50) `actions` 를 쓴다. 학습 에피소드의 27 % (373 / 1373)는 쌓기에 실패한 궤적이다 (`success` 필드). 실패한 궤적도 빼지 않고 쓴다. `states` (45차원)에 큐브 위치가 있지만 모델 입력에는 쓰지 않는다. `video_path` 는 원 저장소의 절대경로라 파일 이름만 쓴다.
 
 ### 8.2 로더와 학습
 
-로더 `datasets/acwm_phys_dset.py`, 설정 `conf/env/acwm_{cloth_move,push_sand,stack_cube}.yaml`. Pour Water 로더처럼 슬라이스가 쓰는 프레임만 decord 로 디코딩한다. action 은 분할 전 `ind_train` 전체 통계로 z-score, proprio·state 는 더미다.
+로더는 `datasets/acwm_phys_dset.py`, 설정은 `conf/env/acwm_{cloth_move,push_sand,stack_cube}.yaml` 이다. Pour Water 로더처럼 슬라이스가 쓰는 프레임만 decord 로 디코딩한다. action 은 분할 전 `ind_train` 전체 통계로 z-score 정규화한다. proprio·state 는 더미다.
 
 | 항목 | 값 |
 |---|---|
-| 모델·옵티마이저 | §7.2 의 모델 B 와 같다: num_hist 1, frameskip 5, 224, predictor lr 5e-5 · decoder 3e-4 · action encoder 5e-4, 배치 24, seed 0 |
-| epoch | 환경마다 슬라이스 수가 달라서 optimizer step 이 Pour Water B (64,170)와 비슷하도록 정했다: Cloth Move 4,125 it × 15 = 61,875, Push Sand 3,611 × 18 = 64,998, Stack Cube 2,485 × 25 = 62,125 |
+| 모델·옵티마이저 | §7.2 의 모델 B 와 같다 (num_hist 1, frameskip 5, 224, predictor lr 5e-5 · decoder 3e-4 · action encoder 5e-4, 배치 24, seed 0) |
+| epoch | 환경마다 슬라이스 수가 다르다. optimizer step 이 Pour Water B (64,170)와 비슷하도록 정했다. Cloth Move 4,125 it × 15 = 61,875, Push Sand 3,611 × 18 = 64,998, Stack Cube 2,485 × 25 = 62,125 다 |
 | 작업 | `repro/jobs/acwm_phys_pilot.txt` (에피소드 60개·3 epoch), `repro/jobs/acwm_phys.txt` (본 학습과 평가·물리량·영상) |
 
-- **frameskip 5**: 224 px 에서 k 프레임 뒤를 그대로 복사한 LPIPS 가 k=1 / k=5 에서 Cloth Move 0.017 / 0.058, Push Sand 0.0066 / 0.027, Stack Cube 0.074 / 0.164 다 (학습 40 에피소드; Pour Water 는 0.021 / 0.073). Stack Cube 는 한 프레임 변화가 이미 크지만 설정을 하나로 맞췄다.
-- **num_hist 1**: Pour Water 에서 num_hist 3 과 1 이 같은 스텝 수에서 차이가 없었다 (§7). 스캔 특징의 한 스텝 변화를 선형 회귀로 맞추면 frameskip 5 에서 이전 스텝을 더해도 R² 가 Cloth Move 0.582 → 0.592, Stack Cube 0.934 → 0.950 로 거의 같다 (Push Sand 0.084 → 0.140; 선형 대리 지표라 참고용). 과거 프레임이 필요한지를 직접 본 실행은 없다.
+- frameskip 5: 224 px 에서 k 프레임 뒤를 복사로 예측한 LPIPS 가 k=1 / k=5 에서 Cloth Move 0.017 / 0.058, Push Sand 0.0066 / 0.027, Stack Cube 0.074 / 0.164 다 (학습 40 에피소드). Pour Water 는 0.021 / 0.073 이다. Stack Cube 는 한 프레임 변화가 크지만 설정을 하나로 맞췄다.
+- num_hist 1: Pour Water 에서 num_hist 3 과 1 이 같은 스텝 수에서 차이가 없었다 (§7). 스캔 특징의 한 스텝 변화를 선형 회귀로 맞추면 frameskip 5 에서 이전 스텝을 더해도 R² 가 Cloth Move 0.582 → 0.592, Stack Cube 0.934 → 0.950 로 거의 같다. Push Sand 는 0.084 → 0.140 이다. 이 회귀는 선형 대리 지표이고 참고용이다. 과거 프레임이 필요한지를 확인한 실행은 없다.
 
 ### 8.3 평가
 
-`repro/eval/eval_acwm_phys.py` 는 §7.3 의 지표·기준선을 그대로 쓴다 (한 스텝, 37프레임 창의 열린 루프, 전체 에피소드, action 민감도, ACWM 방식 지표). 다른 점:
+`repro/eval/eval_acwm_phys.py` 는 §7.3 과 같은 지표·기준선을 쓴다 (한 스텝, 37프레임 창의 열린 루프, 전체 에피소드, action 민감도, ACWM 방식 지표). 다른 점은 다음과 같다.
 
-- 창 시작은 에피소드마다 `linspace(0, 프레임 수 − 37, 10)`. 표는 예측 프레임 전부(창마다 7개)를 모은다 (Pour Water 표는 창 프레임 3 이상).
-- 전체 에피소드 롤아웃은 프레임 0, 5, 10, … 를 끝까지 (Cloth Move·Push Sand 12 스텝, Stack Cube 10–11 스텝). 디코딩한 프레임(모델 예측, 정답을 인코더·디코더에 통과시킨 재구성)을 세트별 npz 로 저장한다.
-- 그룹: Cloth Move `ood_test` 는 smaller / larger, Stack Cube 는 success / fail 과 `ood_test` 의 방향 4개.
-- ACWM 방식 지표의 해상도는 ACWM `data_config.py` 의 obs_shape (240×240, Push Sand 240×400).
+- 창 시작은 에피소드마다 `linspace(0, 프레임 수 − 37, 10)` 이다. 표는 모든 예측 프레임(창마다 7개)을 모은다. Pour Water 표는 창 프레임 3 이상을 모은다.
+- 전체 에피소드 롤아웃은 프레임 0, 5, 10, … 를 끝까지 예측한다 (Cloth Move·Push Sand 12 스텝, Stack Cube 10–11 스텝). 디코딩한 프레임(모델 예측, 정답을 인코더·디코더에 통과시킨 재구성)을 세트별 npz 로 저장한다.
+- 그룹: Cloth Move `ood_test` 는 smaller / larger 로 나눈다. Stack Cube 는 success / fail 과 `ood_test` 의 방향 4개로 나눈다.
+- ACWM 방식 지표의 해상도는 ACWM `data_config.py` 의 obs_shape 다 (240×240, Push Sand 240×400).
 
-`repro/eval/eval_acwm_phys_quant.py` 는 저장한 프레임과 정답 프레임(224×224)을 같은 HSV 색 마스크로 재서 비교한다. 6 px 미만이면 "안 보임"으로 친다.
+`repro/eval/eval_acwm_phys_quant.py` 는 저장한 프레임과 정답 프레임(224×224)을 같은 HSV 색 마스크로 재서 비교한다. 6 px 미만이면 "안 보임"으로 판정한다.
 
 | 환경 | 재는 것 |
 |---|---|
@@ -235,8 +235,8 @@ SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])�
 | Push Sand | 모래 = 하늘색(hue 90–102, S>100) 의 픽셀 수·IoU·중심. 밀판 = 어두운 픽셀(V<90, S<90)의 가장 큰 덩어리(30 px 이상)의 중심 |
 | Stack Cube | 노랑(hue 26–33, S>180, V>130)·초록(hue 55–66, S>150) 큐브의 픽셀 수·IoU·중심. 마지막 프레임의 "쌓임": 두 큐브가 15 px 이상 보이고 노란 큐브 중심이 초록 큐브 중심 기준 \|dx\| < 11, −35 < dy < −6.5 px. 원본 프레임에 같은 규칙(512 px 환산)을 쓰면 `success` 라벨과 98.8 % 일치한다 (학습) |
 
-정답을 재구성한 프레임에서 잰 값(JSON 의 `recon`)이 정답과 다르면 그 양은 디코더가 못 그리는 것이다. InD 에서 재구성의 마스크 IoU 는 Cloth Move 0.92, Push Sand 0.95, 면적 오차 2–3 % 다. Push Sand `ood_test` 는 재구성 면적이 정답보다 17 % 작다 (디코더도 큰 더미를 다 그리지 못한다).
+정답을 재구성한 프레임에서 잰 값(JSON 의 `recon`)이 정답과 다르면 그 양은 디코더가 그리지 못하는 양이다. InD 에서 재구성의 마스크 IoU 는 Cloth Move 0.92, Push Sand 0.95, 면적 오차 2–3 % 다. Push Sand `ood_test` 는 재구성 면적이 정답보다 17 % 작다. 디코더도 큰 더미를 다 그리지 못한다.
 
-그림은 `repro/eval/plot_acwm_phys.py` (면적 곡선), 영상은 `repro/eval/render_acwm_phys.py` (그룹별 세 에피소드 묶음, `--per_episode N` 으로 에피소드별 영상). 모델을 다시 돌리지 않고 저장한 프레임만 읽는다.
+그림은 `repro/eval/plot_acwm_phys.py` (면적 곡선), 영상은 `repro/eval/render_acwm_phys.py` (그룹별 세 에피소드 묶음, `--per_episode N` 으로 에피소드별 영상)로 만든다. 두 스크립트는 모델을 다시 실행하지 않고 저장한 프레임만 읽는다.
 
-한계: 시드 하나·설정 하나다. 검증 잠재 손실이 마지막 epoch 에도 epoch 당 0.4–0.8 % 씩 내려가고 있었다. 논문의 ACWM-DiT 수치와는 프레임 부분집합(frameskip 5)·split 크기·모델이 달라 직접 비교하지 않는다.
+한계는 다음과 같다. 시드 하나·설정 하나로 실행했다. 검증 잠재 손실이 마지막 epoch 에도 epoch 당 0.4–0.8 % 씩 내려가고 있었다. 논문의 ACWM-DiT 수치와는 프레임 부분집합(frameskip 5)·split 크기·모델이 달라 수치를 비교하지 않는다.
