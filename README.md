@@ -4,6 +4,16 @@
 
 ## Experiments on this branch
 
+**Distracting Reacher.** The same episode rendered twice: the default background (top) and a video playing behind the arm (bottom). The arm, the target and the actions are identical in both rows.
+
+![Distracting Reacher: the same states with the clean background and with a video background](assets/occlusion_distracting_reacher.png)
+
+<sub>Background frames are from [DAVIS 2017](https://davischallenge.org/) (CC BY-NC 4.0). In the current code they are pasted upside down and stretched to a square.</sub>
+
+**Moving camera.** The same episode seen from the dataset's fixed camera and from a camera that moves during the episode (here it turns 127° around the table while rising and moving closer). Rows 1–2 show the same rope states, rows 3–4 the same particle states; only the camera differs.
+
+![Moving camera: the same Rope and Granular states from the dataset camera and from a moving camera](assets/occlusion_moving_camera.png)
+
 | | Distracting Reacher | Moving camera |
 |---|---|---|
 | **What changes in the image** | The background is a video ([DAVIS 2017](https://davischallenge.org/)) that advances one frame per step | The camera's 3-D pose moves during the episode (it turns around the table and changes height and distance) |
