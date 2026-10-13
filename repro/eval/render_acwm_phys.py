@@ -9,9 +9,10 @@ eval_acwm_phys.py 와 eval_acwm_phys_quant.py 가 저장한 프레임만 읽는�
 --per_episode N 을 주면 위 대신 그룹마다 에피소드 N 개를 하나씩 따로 (Real | Model, --scale 배 확대) <out_dir>/episodes/ 에 쓴다:
   <set>_<group>_<순위>_<에피소드>.mp4   순위는 전체 에피소드 LPIPS 가 낮은 쪽이 01. 그룹 안에서 분위가 고르게 퍼지도록 고른다.
 --groups 로 쓸 그룹을 고른다 (예: Stack Cube 는 success,fail — 방향 그룹과 겹치지 않게).
+--gif 를 더하면 에피소드별 영상을 GIF 로도 쓴다 (README 의 그림은 --scale 1 --gif 로 만든 것).
 
 usage: python repro/eval/render_acwm_phys.py <out_prefix> <out_dir> [--sets ind_test,ood_test] [--fps 3]
-       [--per_episode N] [--scale 2] [--groups g1,g2]
+       [--per_episode N] [--scale 2] [--groups g1,g2] [--gif]
 """
 import os, json, argparse
 import numpy as np
@@ -34,6 +35,14 @@ def show(frame, env, label=None, scale=1):
     return im
 
 
+def write_gif(frames, path, fps):
+    """One 256-colour palette for the whole clip (per-frame palettes lose small coloured objects such as the gripper balls)."""
+    from PIL import Image
+    pal = Image.fromarray(np.concatenate(frames, 0)).quantize(colors=256, method=Image.FASTOCTREE, dither=Image.NONE)
+    q = [Image.fromarray(f).quantize(palette=pal, dither=Image.NONE) for f in frames]
+    q[0].save(path, save_all=True, append_images=q[1:], duration=round(1000 / fps), loop=0)
+
+
 def spread(order, n):
     """n episodes of a group sorted by score, at evenly spaced quantiles (all of them if the group is smaller)"""
     if len(order) <= n:
@@ -50,6 +59,7 @@ def main():
     ap.add_argument("--per_episode", type=int, default=0)
     ap.add_argument("--scale", type=int, default=2)
     ap.add_argument("--groups", default="")
+    ap.add_argument("--gif", action="store_true")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
     info = json.load(open(f"{args.out_prefix}.json"))
@@ -75,6 +85,8 @@ def main():
                     video = [video[0]] * 2 + video + [video[-1]] * (2 * args.fps)
                     stem = os.path.splitext(str(z["names"][e]))[0]
                     imageio.mimsave(os.path.join(out, f"{name}_{g}_{r + 1:02d}_{stem}.mp4"), video, fps=args.fps, macro_block_size=2)
+                    if args.gif:
+                        write_gif(video, os.path.join(out, f"{name}_{g}_{r + 1:02d}_{stem}.gif"), args.fps)
             continue
         for g, mem in groups.items():
             if len(mem) < 3:
@@ -89,7 +101,7 @@ def main():
                 video.append(np.concatenate(rows, 0))
             video = [video[0]] * 2 + video + [video[-1]] * (2 * args.fps)  # hold the first and the last frame
             stem = os.path.join(args.out_dir, f"qual_{name}_{g}")
-            imageio.mimsave(stem + ".gif", video, duration=1000 / args.fps, loop=0)
+            write_gif(video, stem + ".gif", args.fps)
             imageio.mimsave(stem + ".mp4", video, fps=args.fps, macro_block_size=2)
             e = eps[1]
             steps = list(range(0, int(k_full[e]), 2))

@@ -2,6 +2,19 @@
 
 > **Branch `hanbin5/acwm-phys` is one experiment:** we train the DINO-WM world model on four physics environments of the ACWM-Phys benchmark, **Pour Water** (fluid), **Cloth Move** (cloth), **Push Sand** (granular material) and **Stack Cube** (rigid pick-and-stack), and measure how well it predicts future frames from the first frame and the actions, inside and outside the training distribution.
 
+<table>
+<tr>
+<td align="center"><b>Pour Water</b><br><img src="assets/acwm_pour_water_ind.gif" width="420" alt="Pour Water: real video next to the model's rollout"></td>
+<td align="center"><b>Cloth Move</b><br><img src="assets/acwm_cloth_move_ind.gif" width="420" alt="Cloth Move: real video next to the model's rollout"></td>
+</tr>
+<tr>
+<td align="center"><b>Push Sand</b><br><img src="assets/acwm_push_sand_ind.gif" width="420" alt="Push Sand: real video next to the model's rollout"></td>
+<td align="center"><b>Stack Cube</b><br><img src="assets/acwm_stack_cube_ind.gif" width="420" alt="Stack Cube: real video next to the model's rollout"></td>
+</tr>
+</table>
+
+In every clip the left half is the **real** video and the right half is the **model**: the world model's prediction of the whole episode from the first frame and the actions, decoded to pixels. These four are typical in-distribution test episodes.
+
 - **Videos, real next to model:** [Pour Water](https://drive.google.com/drive/folders/1ejhY8cU0dFgsPEEExnReXy0_kTZ1yRkg) · [Cloth Move](https://drive.google.com/drive/folders/1zackVOkDErFJBOC7ylLhR44QV_rfAZkC) · [Push Sand](https://drive.google.com/drive/folders/1jPap3D5vxFnut8BHrOugjFDgN9xxZkIy) · [Stack Cube](https://drive.google.com/drive/folders/1r2SIYP-alTeVXvKPwAqPim6WAvd6t6IL) (Google Drive)
 - **Results:** [summary](#summary) and [tables](#acwm-phys-results) below
 - **Run it yourself:** [Reproduce the ACWM-Phys experiments](#reproduce-the-acwm-phys-experiments)
@@ -17,6 +30,24 @@ The repository this branch lives in reproduces the planning benchmarks of the DI
 - **Out of distribution, the amount of material is pulled to what training showed.** A cloth 2.5× larger than the training cloth shrinks to the training size within one episode: in the last frame the real cloth covers 4,475 pixels and the model's 1,836 (1,888 on InD episodes). A smaller cloth grows (real 404, model 1,129), a sand pile with twice the particles shrinks to the training size (real 3,886, model 1,843), and the poured water ends near the training mean whatever the real amount.
 - **Rare outcomes are pulled to the common one.** In Stack Cube, 27 % of the training episodes are failed stacks. On failed test episodes the model's last frame shows a stacked cube in 23–24 % of the episodes; the real last frame does in 8–12 %.
 - **The decoder is not the cause.** The decoder draws the OoD sizes and the failed stacks when it is given the features of the real frames (last column of the second table). The predicted features are what changes.
+
+Outside the training distribution (left real, right model):
+
+<table>
+<tr>
+<td align="center"><b>Cloth 2.5× larger</b>: the model shrinks it to the training size<br><img src="assets/acwm_cloth_move_ood_larger.gif" width="420" alt="Cloth Move with a larger cloth"></td>
+<td align="center"><b>Cloth 0.26× the area</b>: the model grows it<br><img src="assets/acwm_cloth_move_ood_smaller.gif" width="420" alt="Cloth Move with a smaller cloth"></td>
+</tr>
+<tr>
+<td align="center"><b>Twice the sand</b>: the pile shrinks to the training size<br><img src="assets/acwm_push_sand_ood.gif" width="420" alt="Push Sand with twice the particles"></td>
+<td align="center"><b>Less water</b>: the box fills as much as in training<br><img src="assets/acwm_pour_water_ood_low.gif" width="420" alt="Pour Water with less water"></td>
+</tr>
+<tr>
+<td align="center" colspan="2"><b>A failed stack</b>: the real arm loses the cube, the model stacks it<br><img src="assets/acwm_stack_cube_ood_fail.gif" width="420" alt="Stack Cube episode in which the real stack fails"></td>
+</tr>
+</table>
+
+The cloth and sand clips are an episode near the median error of their test group, and the water clip is the episode with the median amount of water of its group. The Stack Cube clip was picked to show the effect: the model ends with a stacked cube in 23 % of the failed OoD episodes.
 
 ## Environments, videos and result files
 
@@ -66,6 +97,10 @@ What the rollout does to the scene, measured with the same colour mask on real a
 | Stack Cube | InD test, failed stacks (17) | last frame shows the cube stacked | 12 % | 24 % | 18 % |
 | Stack Cube | OoD, successful stacks (200) | last frame shows the cube stacked | 100 % | 90 % | 100 % |
 | Stack Cube | OoD, failed stacks (71) | last frame shows the cube stacked | 8 % | 23 % | 6 % |
+
+![Cloth and sand area over the whole-episode rollout: real, model, decoder on real frames](assets/acwm_area_cloth_sand.png)
+
+Area of the cloth and of the sand over the episode, averaged over each test group. Blue is the real video, orange the model's rollout, grey the decoder on the real frames.
 
 Limits of these numbers:
 - One seed and one setting per environment (Pour Water has two models; num_hist 3 and 1 did not differ at equal horizon). The validation loss was still falling slowly at the last epoch (0.4–1.8 % per epoch).
@@ -121,7 +156,7 @@ bash repro/queue/start.sh repro/jobs/acwm_phys.txt
 bash repro/queue/start.sh repro/jobs/pour_water.txt
 ```
 
-**Videos, figure and tables.** These read the saved frames and JSON files, no GPU: the per-episode videos of the Drive folders, the cloth and sand area figure, and the two tables of this README.
+**Videos, figures and tables.** These read the saved frames and JSON files, no GPU: the per-episode videos of the Drive folders, the cloth and sand area figure, the two tables of this README, and the clips shown in this README (`assets/acwm_*.gif`; the Pour Water clips need the videos of `repro/eval/render_pour_water.py`).
 
 ```bash
 R=$DINO_WORK/results/acwm_phys
@@ -130,6 +165,7 @@ python repro/eval/render_acwm_phys.py $R/sand_h1f5 $R/figs/sand_h1f5 --per_episo
 python repro/eval/render_acwm_phys.py $R/stack_h1f5 $R/figs/stack_h1f5 --per_episode 10 --groups success,fail
 python repro/eval/plot_acwm_phys.py $R $R/figs/fig_area_cloth_sand.png
 python repro/eval/tables_acwm_phys.py $DINO_WORK/results
+python repro/eval/readme_figures_acwm_phys.py $DINO_WORK/results assets
 ```
 
 **Where things land and what to compare.** Models: `$DINO_WORK/train_runs/outputs/<job>/`. Logs: `$DINO_WORK/runs/<job>.log`. Results: `$DINO_WORK/results/acwm_phys/<env>_h1f5.json` and `<env>_h1f5_quant.json` (videos and grids under `figs/`), and `$DINO_WORK/results/pour_water/`. `tables_acwm_phys.py` prints the two tables above from your JSON files; the JSON files of our runs are in the Drive folders. A re-run will not be bit-identical (GPU non-determinism), and with one seed per environment we do not know how much the numbers move between runs.
