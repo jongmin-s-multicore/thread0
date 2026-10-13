@@ -1,7 +1,7 @@
 # 실험 계획: Rope·Granular 에서 카메라가 움직일 때의 예측
 
-브랜치 `hanbin5/occlusion`. Distracting Reacher 실험([README_experiment.md](README_experiment.md))의 확장이다.
-그 실험이 "작업과 무관한 배경 변화"를 다뤘다면, 이 실험은 **카메라의 3D pose 가 에피소드 안에서 움직일 때**
+브랜치 `hanbin5/occlusion` 의 실험이다. thread1 의 Distracting Reacher 실험([README_experiment.md](README_experiment.md), 이 브랜치의 실험은 아니다)에서
+출발했다. 그 실험이 "작업과 무관한 배경 변화"를 다뤘다면, 이 실험은 **카메라의 3D pose 가 에피소드 안에서 움직일 때**
 DINO-WM 이 다음 관측을 예측할 수 있는지를 본다. 작성 2026-10-13. 결과는 이 문서가 아니라 이슈에 올린다.
 
 ## 1. 질문

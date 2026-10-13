@@ -1,30 +1,23 @@
-# thread0 — DINO-WM with video backgrounds and a moving camera
+# thread0 — DINO-WM with a moving camera (Rope, Granular)
 
-> **This is the `hanbin5/occlusion` branch.** It holds two experiments on one question: DINO-WM predicts and plans in the feature space of a frozen DINOv2 encoder, so what happens when the image changes for a reason that has nothing to do with the task? In **Distracting Reacher** the background is a playing video. In the **moving-camera experiment** the camera pose moves during a Rope or Granular episode. The branch is [`hanbin5/local`](repro/LOCAL.md) (`main` plus memory/speed changes for two 24 GB GPUs) plus these experiments; the benchmark reproduction below the first section is unchanged.
+> **This is the `hanbin5/occlusion` branch: the moving-camera experiment.** DINO-WM predicts in the feature space of a frozen DINOv2 encoder. This experiment asks whether it can still predict the next observation when the camera's 3-D pose moves during a Rope or Granular episode. The branch is [`hanbin5/local`](repro/LOCAL.md) (`main` plus memory/speed changes for two 24 GB GPUs) plus this experiment; the benchmark reproduction below the first section is unchanged.
 
-## Experiments on this branch
+## The moving-camera experiment (this branch)
 
-**Distracting Reacher.** The same episode rendered twice: the default background (top) and a video playing behind the arm (bottom). The arm, the target and the actions are identical in both rows.
+![The same Rope and Granular states from the dataset camera and from a moving camera](assets/occlusion_moving_camera.png)
 
-![Distracting Reacher: the same states with the clean background and with a video background](assets/occlusion_distracting_reacher.png)
+The same episode seen from the dataset's fixed camera and from a camera that moves during the episode (here it turns 127° around the table while rising and moving closer). Rows 1–2 show the same rope states, rows 3–4 the same particle states; only the camera differs.
 
-<sub>Background frames are from [DAVIS 2017](https://davischallenge.org/) (CC BY-NC 4.0). In the current code they are pasted upside down and stretched to a square.</sub>
+- **What changes in the image.** The camera's pose: it turns around the table and changes height and distance, at a constant speed within an episode.
+- **What is tested.** Prediction. Does the model predict the next observation when the viewpoint moves, and does the prediction contain both the camera's motion and the object's motion?
+- **Data.** The stored particle states of the paper's Rope and Granular datasets (NVIDIA FleX) are re-rendered from other camera poses, without re-simulating, so every variant has exactly the dataset's states, actions and train/validation split. Re-rendering from the dataset camera reproduces the shipped frames to 0.13 / 255 (Rope).
+- **Models.** Five per object: the fixed-camera model of the reproduction; one trained on random static viewpoints; and three trained with a moving camera — the camera motion not given with 1 context frame, not given with 2 context frames, and given as part of the action.
+- **Evaluation.** Four camera conditions (dataset camera, random static viewpoint, moving, moving faster than in training). The error to the real next frame is compared with the error to two counterfactual frames: "only the camera moved" and "only the object moved".
+- **Status (2026-10-13).** Data rendered. The existing fixed-camera models have been measured without retraining (below). The eight new models are training.
+- **Read.** [PLAN_camera_motion.md](PLAN_camera_motion.md) (Korean: questions, data, models, metrics).
+- **Code.** `env/deformable_env/camera_motion.py` (camera poses and trajectories), `scripts/render_camera_data.py` (re-rendering), `datasets/deformable_cam_dset.py` and `conf/env/deformable_cam.yaml` (training), `scripts/eval_camera_pred.py` (evaluation).
 
-**Moving camera.** The same episode seen from the dataset's fixed camera and from a camera that moves during the episode (here it turns 127° around the table while rising and moving closer). Rows 1–2 show the same rope states, rows 3–4 the same particle states; only the camera differs.
-
-![Moving camera: the same Rope and Granular states from the dataset camera and from a moving camera](assets/occlusion_moving_camera.png)
-
-| | Distracting Reacher | Moving camera |
-|---|---|---|
-| **What changes in the image** | The background is a video ([DAVIS 2017](https://davischallenge.org/)) that advances one frame per step | The camera's 3-D pose moves during the episode (it turns around the table and changes height and distance) |
-| **Environment** | DeepMind Control Reacher (`easy`) | Rope and Granular (NVIDIA FleX), the paper's deformable environments |
-| **What is tested** | Planning. Is the planning cost (L2 distance between DINOv2 features of the imagined and the goal image) still tied to the true fingertip–target distance, or can it be lowered by matching the background? | Prediction. Does the model predict the next observation when the viewpoint moves, and does the prediction contain both the camera's motion and the object's motion? |
-| **Design** | Each trajectory is rendered twice, clean and with a video background, so the two models differ in pixels only. Four test conditions: clean (T1), training videos (T2), unseen videos (T3), goal image from another moment of the video (T4) | The stored particle states of the dataset are re-rendered from other camera poses, without re-simulating, so every variant has the dataset's states and actions. Five models per object: fixed camera, random static viewpoints, and moving camera with the motion not given (1 or 2 context frames) or given as part of the action. Four camera conditions at test time |
-| **Status (2026-10-13)** | Code merged from [thread1 `occlusion0`](https://github.com/jongmin-s-multicore/thread1/tree/occlusion0) (by davidjk522) and smoke-tested end to end on this environment (tiny settings, synthetic backgrounds). The full-size run has not been started | Data rendered. The existing fixed-camera models have been measured without retraining (below). The eight new models are training |
-| **Read** | [README_experiment.md](README_experiment.md) (how to run), [CLAUDE.md](CLAUDE.md) (design and why) | [PLAN_camera_motion.md](PLAN_camera_motion.md) (Korean: questions, data, models, metrics) |
-| **Code** | `env/distracting_reacher.py`, `scripts/collect_data.py`, `scripts/eval.py`, `scripts/analyze.py`, `scripts/run_all.sh` | `env/deformable_env/camera_motion.py`, `scripts/render_camera_data.py`, `datasets/deformable_cam_dset.py`, `scripts/eval_camera_pred.py` |
-
-**First measurement (moving camera, no retraining).** The Rope and Granular models of the reproduction were trained with one fixed camera. Their one-step prediction error in DINOv2 feature space, on 40 validation episodes, next to the error of simply copying the current frame:
+**First measurement (no retraining).** The Rope and Granular models of the reproduction were trained with one fixed camera. Their one-step prediction error in DINOv2 feature space, on 40 validation episodes, next to the error of simply copying the current frame:
 
 | Camera at test time | Rope: prediction / copy | Granular: prediction / copy |
 |---|---|---|
@@ -34,6 +27,8 @@
 | Moving, 2° per step | 1.578 / 0.837 | 1.152 / 0.770 |
 
 A viewpoint 5° away from the training camera is enough to make the prediction worse than copying the current frame: these models do not generalize over viewpoint at all. The full table is in [PLAN_camera_motion.md §3](PLAN_camera_motion.md). Results of the newly trained models will be posted as an issue.
+
+**Where the branch started.** It started from the code of the Distracting Reacher experiment of [thread1 `occlusion0`](https://github.com/jongmin-s-multicore/thread1/tree/occlusion0) (by davidjk522: a DeepMind Control Reacher with a video playing in the background), which is merged into this branch. That is why its files are in this tree ([README_experiment.md](README_experiment.md), [CLAUDE.md](CLAUDE.md), `env/distracting_reacher.py`, `scripts/{collect_data,eval,analyze}.py`, `scripts/run_all.sh`). It is thread1's experiment, not one of this branch.
 
 ---
 
