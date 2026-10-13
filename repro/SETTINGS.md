@@ -131,6 +131,25 @@ upstream 설정 파일 그대로이고, 바꾼 값은 굵게 표시했다.
 
 upstream `train.py` 의 검증과 같은 계산(`model.eval()`, `model(obs, act)`, `metrics/image_metrics.eval_images` — VGG LPIPS, 11×11 가우시안 SSIM, 정규화된 [-1, 1] 이미지)을 검증 분할 전체에 대해 한다 (`eval/eval_pred_quality.py`). 슬라이스가 5000 개를 넘으면 5000 개만 쓴다: `train.py` 처럼 `seed(training.seed)` 뒤에 데이터셋을 만들어 슬라이스 순서(무작위 순열)를 학습 때와 같게 하고, 그 순서에서 균등 간격으로 고른다. upstream 검증은 첫 배치(32개)에서만 이미지 지표를 계산한다. 논문은 예측 길이와 표본 수를 적지 않았다.
 
+### 5.5 PushT 데모 전체 목표 (long-horizon)
+
+§5.1 의 PushT 목표는 25 스텝 뒤 상태다. 목표가 멀 때를 보려고 검증 데모 하나를 통째로 한 에피소드로 둔다. 재학습은 없고 공개 체크포인트를 쓴다.
+
+| 항목 | 값 |
+|---|---|
+| 에피소드 | 검증 분할 (`pusht_noise/val`) 데모 21개 전부, 데모 순서대로 (`eval/pusht_fulldemo_targets.py`) |
+| 시작 | 데모의 첫 상태 |
+| 목표 | 데모의 행동을 env 에서 끝까지 재생해 도달한 상태와 그 렌더 이미지 (`goal_source=dset` 과 같은 방식이고 구간만 데모 전체다). 재생한 상태는 데이터셋 상태와 같다 (마지막 상태 차 1.3e-4 이하) |
+| 길이 | env 75–166 스텝 (중앙값 113) |
+| 블록 | 시작에서 연두색 T (256, 256, π/4) 까지 20–215 px · 11–173°, 목표에서 4.4–11.3 px · 0.1–5.6° — 데모가 모두 블록을 연두색 T 에 올리고 끝난다 |
+| planning | §5.1 PushT 열과 같다 (`plan_pusht.yaml`, `max_iter` 10 = env 250 스텝, seed 99). 목표만 `goal_source=file` 로 준다. `plan.py` 는 CEM horizon 을 설정의 `goal_H` (5) 로 두므로 한 번에 계획하는 길이는 25 스텝 그대로다 |
+| 성공 | §5.2 PushT 와 같다 (MPC 반복 끝마다, 즉 25 스텝마다 판정) |
+
+- 실행은 `eval/pusht_fulldemo_mpc.sh` 로 한다. `plan.py` 를 `eval/plan_dump_actions.py` 로 감싸 실행한 행동(`diag_actions.pkl`)을 남긴다 — 아래 분석이 이 행동을 env 에서 다시 재생한다.
+- `eval/pusht_fulldemo_analyze.py`: 에피소드별로 성공(실행의 판정과 같은지 확인), 블록만 본 성공(블록 위치 20 px · 각도 π/9, 끝과 MPC 반복 끝 어디서든), 블록의 시작·끝·최소 거리, env 의 coverage(블록과 연두색 T 의 겹침, Diffusion Policy 지표)를 낸다. 데모 끝 상태의 coverage 는 0.84–0.91 이다.
+- `eval/pusht_openloop_error.py`: 데모의 첫 프레임만 인코딩하고 데모의 행동으로 world model 을 끝까지 굴려(1 프레임 context, planning 과 같다) 5 스텝마다 실제 프레임과 비교한다: 시각 latent MSE(planning 목적 함수의 시각 항), 첫 프레임 latent 를 그대로 둔 값, 디코딩한 예측의 LPIPS·SSIM.
+- `eval/pusht_cost_landscape.py`: planning 목적 함수(시각 latent MSE + alpha·proprio latent MSE)를 world model 예측 없이 실제 프레임에서 계산한다 — 데모를 재생한 경로와 MPC 가 실행한 경로 각각에서 목표까지의 비용. 목적 함수 자체가 어느 상태를 더 좋게 보는지를 모델 오차·CEM 탐색과 분리해서 본다.
+
 ## 6. upstream 코드·논문과 다른 점
 
 main 의 코드 변경은 upstream `0a9492f` 위의 커밋이다 (7개 파일, 수정 블록마다 `[repro]` 주석, `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`). `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.

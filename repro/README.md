@@ -36,6 +36,12 @@ repro/
 │   ├── reformat_eval_videos.py    예전 평가 영상을 지금 형식으로, 목표 표시 없이 (Wall 등): Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── video_format.py        위 세 도구가 같이 쓰는 함수 (가려진 회색 프레임 세기, 라벨이 이미 있는지)
 │   ├── deform_arm_video.py    Rope·Granular planning 작업을 다시 돌려, 팔(xArm6)이 미는 중간 프레임까지 담은 평가 영상도 쓴다 (<out_dir>/arm_video/)
+│   ├── plan_dump_actions.py   plan.py 를 감싸 실행하고 계획한 행동(diag_actions.pkl)도 남긴다
+│   ├── pusht_fulldemo_targets.py  PushT 데모 전체 목표 파일 (검증 데모의 첫 상태 → 끝 상태, goal_source=file 용) — SETTINGS.md §5.5
+│   ├── pusht_fulldemo_mpc.sh      그 목표로 PushT MPC 실행 (pusht_mpc 와 같은 설정, plan_dump_actions.py 경유)
+│   ├── pusht_fulldemo_analyze.py  실행한 행동을 재생해 에피소드별 성공·블록 거리·coverage
+│   ├── pusht_openloop_error.py    데모의 행동으로 world model 을 끝까지 굴렸을 때의 스텝별 오차
+│   ├── pusht_cost_landscape.py    planning 비용을 실제 프레임에서: 데모 경로 대 MPC 경로
 │   └── summarize.py           logs.json·epoch_logs·예측 품질을 $DINO_WORK/results/summary.{md,json} 으로
 └── requirements/
     ├── requirements-dinowm.txt    pip 패키지 목록 (uv pip freeze)
@@ -173,6 +179,22 @@ python repro/eval/reformat_eval_videos.py $DINO_RUNS/wall_mpc $DINO_RUNS/wall_ce
 # 같은 시작·목표의 재실행이지만 FleX 결과가 프로세스마다 비트 단위로 같지는 않아 에피소드별 값이 원래 실행과 다를 수 있다
 CUDA_VISIBLE_DEVICES=<gpu> python repro/eval/deform_arm_video.py $DINO_RUNS/rope_mpc_arm --config-name plan.yaml model_name=train_rope \
   planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5 ckpt_base_path=$DINO_TRAIN
+```
+
+PushT 데모 전체 목표 (SETTINGS.md §5.5). 큐를 거치지 않고 손으로 돌린다.
+
+```bash
+# 목표 파일: targets_all.pkl 과, GPU 2장에 나눠 돌릴 targets_p0.pkl · targets_p1.pkl
+python repro/eval/pusht_fulldemo_targets.py $DINO_WORK/results/pusht_full_demo 2
+# MPC (인자: 이름, GPU, 목표 파일). 산출물은 $DINO_RUNS/<이름>/
+bash repro/eval/pusht_fulldemo_mpc.sh pusht_fulldemo_mpc_p0 <gpu0> $DINO_WORK/results/pusht_full_demo/targets_p0.pkl
+bash repro/eval/pusht_fulldemo_mpc.sh pusht_fulldemo_mpc_p1 <gpu1> $DINO_WORK/results/pusht_full_demo/targets_p1.pkl
+# 분석
+python repro/eval/pusht_fulldemo_analyze.py $DINO_WORK/results/pusht_full_demo/mpc_s99.json \
+  $DINO_RUNS/pusht_fulldemo_mpc_p0 $DINO_RUNS/pusht_fulldemo_mpc_p1
+CUDA_VISIBLE_DEVICES=<gpu> python repro/eval/pusht_openloop_error.py $DINO_WORK/results/pusht_full_demo
+CUDA_VISIBLE_DEVICES=<gpu> python repro/eval/pusht_cost_landscape.py $DINO_WORK/results/pusht_full_demo \
+  $DINO_RUNS/pusht_fulldemo_mpc_p0 $DINO_RUNS/pusht_fulldemo_mpc_p1
 ```
 
 - 산출물: planning 은 `$DINO_RUNS/<job>/` 에 `logs.json`(MPC 반복별 `mpc/*`, 마지막 `final_eval/*`), `plan_targets.pkl`(시작·목표, `goal_source=file` 로 재사용 가능), 그림·영상. 학습은 `$DINO_TRAIN/outputs/<job>/` 에 `hydra.yaml`, `checkpoints/model_<epoch>.pth`, `epoch_logs.jsonl`.
