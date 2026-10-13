@@ -1,6 +1,33 @@
-# thread0 — DINO-WM reproduction
+# thread0 — DINO-WM with video backgrounds and a moving camera
 
-> **This is the [`hanbin5/local`](repro/LOCAL.md) branch**: `main` plus memory/speed changes for two 24 GB GPUs and the run records of this environment (`repro/runs/`). The shared code and docs are on [main](https://github.com/jongmin-s-multicore/thread0/tree/main).
+> **This is the `hanbin5/occlusion` branch.** It holds two experiments on one question: DINO-WM predicts and plans in the feature space of a frozen DINOv2 encoder, so what happens when the image changes for a reason that has nothing to do with the task? In **Distracting Reacher** the background is a playing video. In the **moving-camera experiment** the camera pose moves during a Rope or Granular episode. The branch is [`hanbin5/local`](repro/LOCAL.md) (`main` plus memory/speed changes for two 24 GB GPUs) plus these experiments; the benchmark reproduction below the first section is unchanged.
+
+## Experiments on this branch
+
+| | Distracting Reacher | Moving camera |
+|---|---|---|
+| **What changes in the image** | The background is a video ([DAVIS 2017](https://davischallenge.org/)) that advances one frame per step | The camera's 3-D pose moves during the episode (it turns around the table and changes height and distance) |
+| **Environment** | DeepMind Control Reacher (`easy`) | Rope and Granular (NVIDIA FleX), the paper's deformable environments |
+| **What is tested** | Planning. Is the planning cost (L2 distance between DINOv2 features of the imagined and the goal image) still tied to the true fingertip–target distance, or can it be lowered by matching the background? | Prediction. Does the model predict the next observation when the viewpoint moves, and does the prediction contain both the camera's motion and the object's motion? |
+| **Design** | Each trajectory is rendered twice, clean and with a video background, so the two models differ in pixels only. Four test conditions: clean (T1), training videos (T2), unseen videos (T3), goal image from another moment of the video (T4) | The stored particle states of the dataset are re-rendered from other camera poses, without re-simulating, so every variant has the dataset's states and actions. Five models per object: fixed camera, random static viewpoints, and moving camera with the motion not given (1 or 2 context frames) or given as part of the action. Four camera conditions at test time |
+| **Status (2026-10-13)** | Code merged from [thread1 `occlusion0`](https://github.com/jongmin-s-multicore/thread1/tree/occlusion0) (by davidjk522) and smoke-tested end to end on this environment (tiny settings, synthetic backgrounds). The full-size run has not been started | Data rendered. The existing fixed-camera models have been measured without retraining (below). The eight new models are training |
+| **Read** | [README_experiment.md](README_experiment.md) (how to run), [CLAUDE.md](CLAUDE.md) (design and why) | [PLAN_camera_motion.md](PLAN_camera_motion.md) (Korean: questions, data, models, metrics) |
+| **Code** | `env/distracting_reacher.py`, `scripts/collect_data.py`, `scripts/eval.py`, `scripts/analyze.py`, `scripts/run_all.sh` | `env/deformable_env/camera_motion.py`, `scripts/render_camera_data.py`, `datasets/deformable_cam_dset.py`, `scripts/eval_camera_pred.py` |
+
+**First measurement (moving camera, no retraining).** The Rope and Granular models of the reproduction were trained with one fixed camera. Their one-step prediction error in DINOv2 feature space, on 40 validation episodes, next to the error of simply copying the current frame:
+
+| Camera at test time | Rope: prediction / copy | Granular: prediction / copy |
+|---|---|---|
+| The dataset camera | 0.077 / 0.390 | 0.145 / 0.307 |
+| Static, turned 5° around the table | 0.939 / 0.387 | 0.632 / 0.297 |
+| Static, turned 45° | 2.106 / 0.303 | 1.322 / 0.275 |
+| Moving, 2° per step | 1.578 / 0.837 | 1.152 / 0.770 |
+
+A viewpoint 5° away from the training camera is enough to make the prediction worse than copying the current frame: these models do not generalize over viewpoint at all. The full table is in [PLAN_camera_motion.md §3](PLAN_camera_motion.md). Results of the newly trained models will be posted as an issue.
+
+---
+
+# DINO-WM reproduction (unchanged from `hanbin5/local`)
 
 This is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
 
