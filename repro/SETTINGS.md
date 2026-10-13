@@ -133,39 +133,39 @@ upstream `train.py` 의 검증과 같은 계산을 검증 분할 전체에 대�
 
 ### 5.5 PushT 데모 전체 목표 (long-horizon)
 
-§5.1 의 PushT 목표는 25 스텝 뒤 상태다. 목표가 멀 때를 보려고 검증 데모 하나를 통째로 한 에피소드로 둔다. 재학습은 없고 공개 체크포인트를 쓴다.
+§5.1 의 PushT 목표는 25 스텝 뒤 상태다. 목표가 먼 경우를 평가하기 위해 검증 데모 하나 전체를 한 에피소드로 쓴다. 재학습은 하지 않고 공개 체크포인트를 쓴다.
 
 | 항목 | 값 |
 |---|---|
-| 에피소드 | 검증 분할 (`pusht_noise/val`) 데모 21개 전부, 데모 순서대로 (`eval/pusht_fulldemo_targets.py`) |
+| 에피소드 | 검증 분할 (`pusht_noise/val`) 데모 21개, 데모 순서대로 (`eval/pusht_fulldemo_targets.py`) |
 | 시작 | 데모의 첫 상태 |
-| 목표 | 데모의 행동을 env 에서 끝까지 재생해 도달한 상태와 그 렌더 이미지 (`goal_source=dset` 과 같은 방식이고 구간만 데모 전체다). 재생한 상태는 데이터셋 상태와 같다 (마지막 상태 차 1.3e-4 이하) |
+| 목표 | 데모의 행동을 env 에서 끝까지 재생해 도달한 상태와 그 렌더 이미지 (`goal_source=dset` 과 같은 방식이고 구간은 데모 전체다). 재생한 상태는 데이터셋 상태와 같다 (마지막 상태 차 1.3e-4 이하) |
 | 길이 | env 75–166 스텝 (중앙값 113) |
-| 블록 | 시작에서 연두색 T (256, 256, π/4) 까지 20–215 px · 11–173°, 목표에서 4.4–11.3 px · 0.1–5.6° — 데모가 모두 블록을 연두색 T 에 올리고 끝난다 |
-| planning | §5.1 PushT 열과 같다 (`plan_pusht.yaml`, `max_iter` 10 = env 250 스텝, seed 99). 목표만 `goal_source=file` 로 준다. `plan.py` 는 CEM horizon 을 설정의 `goal_H` (5) 로 두므로 한 번에 계획하는 길이는 25 스텝 그대로다 |
-| 성공 | §5.2 PushT 와 같다 (MPC 반복 끝마다, 즉 25 스텝마다 판정) |
+| 블록 | 시작에서 연두색 T (256, 256, π/4) 까지 20–215 px · 11–173°, 목표에서 4.4–11.3 px · 0.1–5.6°. 모든 데모가 블록을 연두색 T 위에 놓고 끝난다 |
+| planning | §5.1 PushT 열과 같다 (`plan_pusht.yaml`, `max_iter` 10 = env 250 스텝, seed 99). 목표는 `goal_source=file` 로 지정한다. `plan.py` 는 CEM horizon 을 설정의 `goal_H` (5) 로 두므로 한 번에 계획하는 길이는 25 스텝이다 |
+| 성공 | §5.2 PushT 와 같다 (MPC 반복이 끝날 때마다, 25 스텝마다 판정) |
 
-- 실행은 `eval/pusht_fulldemo_mpc.sh` 로 한다. `plan.py` 를 `eval/plan_dump_actions.py` 로 감싸 실행한 행동(`diag_actions.pkl`)을 남긴다 — 아래 분석이 이 행동을 env 에서 다시 재생한다.
-- `eval/pusht_fulldemo_analyze.py`: 에피소드별로 성공(실행의 판정과 같은지 확인), 블록만 본 성공(블록 위치 20 px · 각도 π/9, 끝과 MPC 반복 끝 어디서든), 블록의 시작·끝·최소 거리, env 의 coverage(블록과 연두색 T 의 겹침, Diffusion Policy 지표)를 낸다. 데모 끝 상태의 coverage 는 0.84–0.91 이다.
-- `eval/pusht_openloop_error.py`: 데모의 첫 프레임만 인코딩하고 데모의 행동으로 world model 을 끝까지 굴려(1 프레임 context, planning 과 같다) 5 스텝마다 실제 프레임과 비교한다: 시각 latent MSE(planning 목적 함수의 시각 항), 첫 프레임 latent 를 그대로 둔 값, 디코딩한 예측의 LPIPS·SSIM.
-- `eval/pusht_cost_landscape.py`: planning 목적 함수(시각 latent MSE + alpha·proprio latent MSE)를 world model 예측 없이 실제 프레임에서 계산한다 — 데모를 재생한 경로와 MPC 가 실행한 경로 각각에서 목표까지의 비용. 목적 함수 자체가 어느 상태를 더 좋게 보는지를 모델 오차·CEM 탐색과 분리해서 본다.
+- 실행은 `eval/pusht_fulldemo_mpc.sh` 로 한다. `plan.py` 를 `eval/plan_dump_actions.py` 로 감싸 실행한 행동(`diag_actions.pkl`)을 저장한다. 아래 분석은 이 행동을 env 에서 다시 재생한다.
+- `eval/pusht_fulldemo_analyze.py`: 에피소드별로 성공(실행의 판정과 같은지 확인), 블록 기준 성공(블록 위치 20 px · 각도 π/9, 끝 또는 MPC 반복 끝 중 한 번이라도), 블록의 시작·끝·최소 거리, env 의 coverage(블록과 연두색 T 의 겹침, Diffusion Policy 지표)를 계산한다. 데모 끝 상태의 coverage 는 0.84–0.91 이다.
+- `eval/pusht_openloop_error.py`: 데모의 첫 프레임을 인코딩하고 데모의 행동으로 world model 을 끝까지 rollout 한다(1 프레임 context, planning 과 같다). 5 스텝마다 실제 프레임과 비교한다. 비교 항목은 시각 latent MSE(planning 목적 함수의 시각 항), 첫 프레임 latent 를 예측으로 쓴 값, 디코딩한 예측의 LPIPS·SSIM 이다.
+- `eval/pusht_cost_landscape.py`: planning 목적 함수(시각 latent MSE + alpha·proprio latent MSE)를 world model 예측 없이 실제 프레임에서 계산한다. 데모를 재생한 경로와 MPC 가 실행한 경로 각각에서 목표까지의 비용을 구한다. 목적 함수가 어느 상태에 더 낮은 비용을 주는지를 모델 오차·CEM 탐색과 분리해서 확인한다.
 
-목표 거리별 (`jobs/pusht_long_horizon.txt`). 같은 체크포인트·같은 MPC-CEM 설정으로 목표까지의 거리만 바꾼다.
+목표 거리별 (`jobs/pusht_long_horizon.txt`). 같은 체크포인트와 같은 MPC-CEM 설정에서 목표까지의 거리를 바꾼다.
 
 | 항목 | 값 |
 |---|---|
-| 목표 | 검증 데모에서 d 스텝 떨어진 시작–목표 쌍, d = 25·50·75·100, 각 20쌍, seed 99 (`eval/pusht_segment_targets.py`). `goal_source=dset` 과 같은 방식(데모와 시작 시점을 뽑고 그 뒤 d 스텝의 행동을 env 에서 재생)이고, planner 설정 둘이 같은 쌍을 쓰도록 파일로 둔다 |
-| 블록이 움직이는 양 (20쌍 평균) | d 25: 38 px · 26°, d 50: 78 px · 59°, d 75: 106 px · 91°, d 100: 110 px · 83°. d 25 는 20쌍 중 9쌍에서 블록이 시작부터 성공 허용 범위(20 px · π/9) 안이다 |
+| 목표 | 검증 데모에서 d 스텝 떨어진 시작–목표 쌍, d = 25·50·75·100, 각 20쌍, seed 99 (`eval/pusht_segment_targets.py`). `goal_source=dset` 과 같은 방식(데모와 시작 시점을 뽑고 그 뒤 d 스텝의 행동을 env 에서 재생)이다. planner 설정 둘이 같은 쌍을 쓰도록 파일로 저장한다 |
+| 블록이 움직이는 양 (20쌍 평균) | d 25: 38 px · 26°, d 50: 78 px · 59°, d 75: 106 px · 91°, d 100: 110 px · 83°. d 25 는 20쌍 중 9쌍에서 블록이 시작 시점에 성공 허용 범위(20 px · π/9) 안에 있다 |
 | planner `h<d/5>` | CEM horizon = 목표 거리 (`goal_H` = d/5). upstream `plan.py` 는 horizon 과 MPC 실행 길이를 `goal_H` 로 둔다 |
 | planner `h5` | CEM horizon 5 (25 스텝) 로 계획하고 다시 계획한다 (`goal_H` 5) |
-| MPC 상한 | env 300 스텝: `max_iter` = 300 / (5·`goal_H`) — h5 12, h10 6, h15 4, h20 3 |
+| MPC 상한 | env 300 스텝. `max_iter` = 300 / (5·`goal_H`). h5 12, h10 6, h15 4, h20 3 |
 
 ## 6. upstream 코드·논문과 다른 점
 
 main 의 코드 변경은 upstream `0a9492f` 위의 커밋이다. 7개 파일을 바꿨고 수정 블록마다 `[repro]` 주석이 있다. 변경 내용은 `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'` 로 확인한다. `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.
 GPU 환경에 맞춘 메모리·속도 수정(예: 24 GB GPU 용 attention·청크·평가 디코딩)은 환경별 브랜치에 둔다. main 에는 두지 않는다. 예는 [`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local) 의 `repro/LOCAL.md` 다.
 
-| 변경 | 이유 | 결과에 주는 영향 (확인 방법) |
+| 변경 | 이유 | 결과에 주는 영향과 확인 방법 |
 |---|---|---|
 | MPC `max_iter` 상한 (위 표) | 원본 null 은 50개 중 하나라도 실패하면 끝나지 않는다 (issue #29). 논문은 반복 예산을 적지 않았다 | 한 번 성공한 에피소드는 이후에도 성공으로 세므로 반복별 성공률이 모두 기록된다. 예산별 곡선으로 보고한다 |
 | `train.py` 가 epoch 지표를 `epoch_logs.jsonl` 에도 쓴다 | wandb 를 비활성화하고 실행한다 (`WANDB_MODE=disabled`) | 없음 |

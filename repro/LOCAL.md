@@ -43,7 +43,7 @@
 | CEM opt step 1번 (에피소드 50개, MPC 1회차) | PointMaze 약 371 s, PushT 약 373 s. 24 GB GPU 하나를 두 planning 작업이 나눠 쓸 때의 값이다. 단독 측정값이 아니다. `plan_0_output_<k>.png` 저장 시각 간격으로 쟀다 |
 | Rope 학습 1 epoch (535 iteration + 검증) | RTX 3090 Ti 에서 GPU 를 거의 혼자 쓸 때 약 5분, planning 작업과 GPU 를 나눠 쓸 때 8.5–10.3분이다. `rollout_plots/e<k>_rollout` 생성 시각 간격으로 쟀다 |
 | FleX 롤아웃 (env 1개, prepare 포함 push 3번) | Rope 18.7 s, Granular 45 s |
-| PushT 데모 전체 MPC (`eval/pusht_fulldemo_mpc.sh`, 성공이 없어 MPC 10회를 다 돈 경우) | 에피소드 10개 3.0 h (RTX 3090, CEM opt step 1번 약 35–38 s), 에피소드 11개 4.3 h (RTX 3090 Ti, 약 45–50 s). GPU 메모리 약 5.6 GB. 한 GPU 에서 분석 스크립트가 1–2분씩 같이 돌았다 |
+| PushT 데모 전체 MPC (`eval/pusht_fulldemo_mpc.sh`, 성공이 없어 MPC 10회를 모두 실행한 경우) | 에피소드 10개 3.0 h (RTX 3090, CEM opt step 1번 약 35–38 s), 에피소드 11개 4.3 h (RTX 3090 Ti, 약 45–50 s). GPU 메모리 약 5.6 GB. 한 GPU 에서 분석 스크립트가 1–2분씩 함께 실행됐다 |
 
 ## 5. 실행 기록
 
@@ -63,7 +63,7 @@
 | `dinowm_rope-dinov2s14-100ep-plr5e-5`, `…-plr5e-5-at100-{mpccem,predq}` | `train_rope_plr5e-5`, `rope_mpc_plr5e-5`, `pq_rope_plr5e-5` | Rope 재학습, predictor lr 5e-5 (논문 Table 12 값, `jobs/rope_plr.txt`) |
 | `dinowm_{rope,granular}-dinov2s14-100ep-at100-mpccem-armvideo` | `{rope,granular}_mpc_arm` | `{rope,granular}_mpc` 와 같은 설정으로 다시 실행하고 팔이 움직이는 평가 영상을 만들었다 (`repro/eval/deform_arm_video.py`). 큐 밖에서 실행했다. 시작·목표 입자 상태는 같다. 비트 단위 재현은 아니다 |
 
-PushT 데모 전체 목표 실행(`pusht_fulldemo_mpc_p0`·`_p1`, SETTINGS.md §5.5)은 큐 밖에서 `repro/eval/pusht_fulldemo_mpc.sh` 로 돌렸다. 이 두 실행의 run.yaml 은 아직 만들지 않았다 (`make_run_yaml.py` 가 이 실행을 모른다). 실행할 때 도구는 커밋 전이라 레포 밖에 있었고, 이 브랜치의 `repro/eval/` 파일은 그것을 옮긴 것이다 (경로와 usage 문구만 바꿨다). 옮긴 뒤의 파일로 다시 돌려 확인한 것은 `pusht_fulldemo_targets.py` (목표 파일이 실행에 쓴 것과 같다)와 `pusht_fulldemo_analyze.py` (같은 값)뿐이다. `pusht_fulldemo_mpc.sh`, `pusht_openloop_error.py`, `pusht_cost_landscape.py` 는 옮긴 뒤 돌려 보지 않았다.
+PushT 데모 전체 목표 실행(`pusht_fulldemo_mpc_p0`·`_p1`, SETTINGS.md §5.5)은 큐 밖에서 `repro/eval/pusht_fulldemo_mpc.sh` 로 실행했다. 이 두 실행의 run.yaml 은 아직 만들지 않았다. `make_run_yaml.py` 가 이 실행을 지원하지 않는다. 실행 당시 도구는 커밋 전이어서 레포 밖에 있었다. 이 브랜치의 `repro/eval/` 파일은 그 도구를 옮긴 것이고 경로와 usage 문구를 바꿨다. 옮긴 파일로 다시 실행해 확인한 것은 `pusht_fulldemo_targets.py` 와 `pusht_fulldemo_analyze.py` 다. 앞의 것은 목표 파일이 실행에 쓴 것과 같았고 뒤의 것은 같은 값을 냈다. `pusht_fulldemo_mpc.sh`, `pusht_openloop_error.py`, `pusht_cost_landscape.py` 는 옮긴 뒤 실행해 보지 않았다.
 
 ## 6. 코드 버전과 결과의 대응
 
