@@ -49,7 +49,7 @@ E-move, Rope / Granular:
 
 "Closest to the real next frame" compares each prediction with three frames: the real next frame, a frame where the camera moved and the object did not, and a frame where the object moved and the camera did not.
 
-- The `fixed` model has a larger error than copy on every camera other than the dataset camera.
+- The `fixed` model has a larger error than copy on E-static and E-move.
 - With the camera motion given as input, the error under a moving camera is 0.36 (Rope) and 0.40 (Granular) of the copy error.
 - With two context frames and no camera input, the one-step error is 0.557 and 0.598. After 5 open-loop steps it is about twice the error of `move-told-h1`.
 - The three models trained with a moving camera have a larger error than copy when the camera is static.
