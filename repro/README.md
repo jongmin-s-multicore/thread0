@@ -23,6 +23,7 @@ repro/
 │   ├── download_acwm_phys.py  ACWM-Phys 네 환경(Pour Water, Cloth Move, Push Sand, Stack Cube)을 HF 고정 커밋으로 받고 에피소드 수를 확인 (2.6 GB)
 │   ├── check_env.sh           설치 점검 (--pyflex: deformable 까지)
 │   └── checks/                렌더·동역학 대조, PyFleX 환경 구성·데이터셋 재생 대조
+│       └── acwm_phys/         ACWM-Phys Cloth Move·Push Sand·Stack Cube 데이터 검사: 전 프레임 스캔, 프레임-action 정렬, frameskip·num_hist 근거 (SETTINGS.md §8)
 ├── queue/
 │   ├── start.sh               작업 큐를 백그라운드로 띄운다 (다시 띄워도 실행 중인 작업은 그대로)
 │   ├── scheduler.py           GPU 슬롯·여유 메모리·선행 작업을 보고 작업을 띄운다. 상태는 $DINO_RUNS/<job>/ 의 파일, OOM 이면 다시 넣는다
@@ -43,6 +44,7 @@ repro/
 │   ├── eval_acwm_phys_quant.py  위 프레임과 정답을 같은 색 마스크로 재서 비교: 천·모래 픽셀 수와 IoU, 그리퍼·밀판·큐브 위치, 쌓임 판정 (GPU 를 쓰지 않는다)
 │   ├── render_acwm_phys.py    Real | Model 전체 에피소드 롤아웃의 GIF·mp4 와 Real / Model / Recon 격자 그림, --per_episode N 으로 에피소드별 mp4 (저장된 프레임만 읽는다)
 │   ├── plot_acwm_phys.py      Cloth Move·Push Sand 의 천·모래 면적 곡선 (Real / Model / 디코더) 그림
+│   ├── tables_acwm_phys.py    루트 README 의 ACWM-Phys 결과 표 두 개를 결과 JSON 에서 만든다
 │   ├── pusht_goal_overlay.py  예전 PushT 평가 영상을 지금 형식으로 (2배 확대): 목표 칸 이미지에서 맞춘 목표 블록 윤곽, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── pointmaze_goal_overlay.py  예전 PointMaze 평가 영상을 지금 형식으로 (2배 확대): 목표 위치(plan_targets.pkl 의 state_g) 원, Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
 │   ├── reformat_eval_videos.py    예전 평가 영상을 지금 형식으로, 목표 표시 없이 (Wall 등): Real/Model/Goal 라벨, 회색 프레임 대신 3초 멈춤
