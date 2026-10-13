@@ -150,6 +150,16 @@ upstream `train.py` 의 검증과 같은 계산(`model.eval()`, `model(obs, act)
 - `eval/pusht_openloop_error.py`: 데모의 첫 프레임만 인코딩하고 데모의 행동으로 world model 을 끝까지 굴려(1 프레임 context, planning 과 같다) 5 스텝마다 실제 프레임과 비교한다: 시각 latent MSE(planning 목적 함수의 시각 항), 첫 프레임 latent 를 그대로 둔 값, 디코딩한 예측의 LPIPS·SSIM.
 - `eval/pusht_cost_landscape.py`: planning 목적 함수(시각 latent MSE + alpha·proprio latent MSE)를 world model 예측 없이 실제 프레임에서 계산한다 — 데모를 재생한 경로와 MPC 가 실행한 경로 각각에서 목표까지의 비용. 목적 함수 자체가 어느 상태를 더 좋게 보는지를 모델 오차·CEM 탐색과 분리해서 본다.
 
+목표 거리별 (`jobs/pusht_long_horizon.txt`). 같은 체크포인트·같은 MPC-CEM 설정으로 목표까지의 거리만 바꾼다.
+
+| 항목 | 값 |
+|---|---|
+| 목표 | 검증 데모에서 d 스텝 떨어진 시작–목표 쌍, d = 25·50·75·100, 각 20쌍, seed 99 (`eval/pusht_segment_targets.py`). `goal_source=dset` 과 같은 방식(데모와 시작 시점을 뽑고 그 뒤 d 스텝의 행동을 env 에서 재생)이고, planner 설정 둘이 같은 쌍을 쓰도록 파일로 둔다 |
+| 블록이 움직이는 양 (20쌍 평균) | d 25: 38 px · 26°, d 50: 78 px · 59°, d 75: 106 px · 91°, d 100: 110 px · 83°. d 25 는 20쌍 중 9쌍에서 블록이 시작부터 성공 허용 범위(20 px · π/9) 안이다 |
+| planner `h<d/5>` | CEM horizon = 목표 거리 (`goal_H` = d/5). upstream `plan.py` 는 horizon 과 MPC 실행 길이를 `goal_H` 로 둔다 |
+| planner `h5` | CEM horizon 5 (25 스텝) 로 계획하고 다시 계획한다 (`goal_H` 5) |
+| MPC 상한 | env 300 스텝: `max_iter` = 300 / (5·`goal_H`) — h5 12, h10 6, h15 4, h20 3 |
+
 ## 6. upstream 코드·논문과 다른 점
 
 main 의 코드 변경은 upstream `0a9492f` 위의 커밋이다 (7개 파일, 수정 블록마다 `[repro]` 주석, `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`). `max_iter`·`eval_every` 는 실행 인자(`jobs/benchmark.txt`)다.
