@@ -70,15 +70,15 @@ The branch includes the Distracting Reacher code from [thread1 `occlusion0`](htt
 
 # DINO-WM reproduction (same as `hanbin5/local`)
 
-This is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
+This repository is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
 
-- **Evaluation videos:** [Google Drive folder `dino-wm-videos`](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3), one sub-folder per experiment (listed below).
-- **Detailed results and discussion** (Korean): issues [#1](https://github.com/jongmin-s-multicore/thread0/issues/1) (PointMaze, PushT, Wall) and [#2](https://github.com/jongmin-s-multicore/thread0/issues/2) (Rope, Granular). Full numbers for the main results table are in the JSON comments of those issues. The additional runs reported below (PointMaze seeds 1 and 101, the original-code-path re-run, the Rope predictor-lr 5e-5 retrain, the Rope/Granular arm-video re-runs) are not in the issues yet; their run records are on the `hanbin5/local` branch (`repro/runs/`).
-- **Protocol** (models, data, hyper-parameters, evaluation, differences from upstream; Korean): [repro/SETTINGS.md](repro/SETTINGS.md). **How to run** (Korean): [repro/README.md](repro/README.md).
+- Evaluation videos: [Google Drive folder `dino-wm-videos`](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). It has one sub-folder per experiment. The experiments are listed below.
+- Detailed results and discussion (Korean): issues [#1](https://github.com/jongmin-s-multicore/thread0/issues/1) (PointMaze, PushT, Wall) and [#2](https://github.com/jongmin-s-multicore/thread0/issues/2) (Rope, Granular). Full numbers for the main results table are in the JSON comments of those issues. The additional runs reported below are PointMaze seeds 1 and 101, the original-code-path re-run, the Rope predictor-lr 5e-5 retrain and the Rope/Granular arm-video re-runs. They are not in the issues yet. Their run records are on the `hanbin5/local` branch (`repro/runs/`).
+- Protocol (Korean): [repro/SETTINGS.md](repro/SETTINGS.md). It covers models, data, hyper-parameters, evaluation and differences from upstream. How to run (Korean): [repro/README.md](repro/README.md).
 
 ## Results
 
-Each row is one sub-folder of the [video folder](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). The planning seed is 99 throughout. Paper numbers are from arXiv v2: Table 1 for MPC, Table 8 for open-loop CEM and GD.
+Each row is one sub-folder of the [video folder](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). The planning seed is 99 in every row. Paper numbers are from arXiv v2. MPC numbers are from Table 1. Open-loop CEM and GD numbers are from Table 8.
 
 | Experiment (video folder) | Environment | World model | Planner | Metric | Ours | Paper |
 |---|---|---|---|---|---|---|
@@ -93,10 +93,10 @@ Each row is one sub-folder of the [video folder](https://drive.google.com/drive/
 | [`rope_mpc`](https://drive.google.com/drive/folders/1KgGV_Ic2AcpQVooBJCnv4EPqivl_qxbk) | Rope | ours (100 epochs) | MPC-CEM | Chamfer distance, 10 instances ↓ | **0.933** ² | 0.41 |
 | [`granular_mpc`](https://drive.google.com/drive/folders/178kKGzYE0xebNJbyfsw1ji9PyrAZUA6C) | Granular | ours (100 epochs) | MPC-CEM | Chamfer distance, 10 instances ↓ | **0.216** ² | 0.26 |
 
-¹ The paper does not state the number of optimization steps behind its open-loop CEM results (Table 8); the only CEM setting it gives is for the planning-time measurement (Appendix A.8: 100 samples, 10 steps). Our open-loop CEM with the MPC configuration's 10 steps (identical to MPC iteration 1, see below) gives PointMaze **0.86** (paper 0.80) and Wall **0.54** (paper 0.74). With 30 steps (these folders), PointMaze rises to 0.90 and Wall drops to 0.28. Wall open-loop CEM peaks at 0.58 at 9 optimization steps, and the gap between the world model's predicted latent and the latent of the real outcome grows with more optimization steps (issue #1).
-² CD of the original evaluation run (the numbers in issue #2). The videos in these two folders come from a separate re-run that also renders the robot arm (see [How to read the videos](#how-to-read-the-videos)); that re-run's final CD is 1.045 for Rope and 0.224 for Granular.
+¹ The paper does not state the number of optimization steps used for its open-loop CEM results (Table 8). The one CEM setting it gives is for the planning-time measurement (Appendix A.8: 100 samples, 10 steps). Our open-loop CEM with the MPC configuration's 10 steps is the same computation as MPC iteration 1 (see below). It gives PointMaze 0.86 (paper 0.80) and Wall 0.54 (paper 0.74). With 30 steps, the setting of these folders, PointMaze rises to 0.90 and Wall drops to 0.28. Wall open-loop CEM peaks at 0.58 at 9 optimization steps, and the gap between the world model's predicted latent and the latent of the real outcome grows with more optimization steps (issue #1).
+² CD of the original evaluation run. Issue #2 reports these numbers. The videos in these two folders are from a separate re-run that also renders the robot arm (see [How to read the videos](#how-to-read-the-videos)). The final CD of that re-run is 1.045 for Rope and 0.224 for Granular.
 
-**Summary.** MPC-CEM matches the paper on PointMaze, PushT and Wall: every gap is 0.02, within the binomial standard error of 50 episodes (0.02–0.04 at success rates of 0.90–0.98). Granular reaches the paper's level (CD 0.216 vs 0.26, lower is better). Rope does not reproduce (0.933 vs 0.41), the same outcome reported in upstream issue [gaoyuezhou/dino_wm#24](https://github.com/gaoyuezhou/dino_wm/issues/24). Open-loop CEM on Wall stays below the paper at every number of optimization steps we measured (at most 0.58 vs 0.74). Open-loop GD on PushT is higher than in the paper (0.56 vs 0.28) with the upstream GD config. We did not find the cause.
+Summary. MPC-CEM matches the paper on PointMaze, PushT and Wall. Every gap is 0.02, which is within the binomial standard error of 50 episodes (0.02–0.04 at success rates of 0.90–0.98). Granular reaches the paper's level (CD 0.216 vs 0.26, lower is better). Rope does not reproduce (0.933 vs 0.41). Upstream issue [gaoyuezhou/dino_wm#24](https://github.com/gaoyuezhou/dino_wm/issues/24) reports the same outcome. Open-loop CEM on Wall is below the paper at every number of optimization steps we measured (at most 0.58 vs 0.74). Open-loop GD on PushT is higher than in the paper (0.56 vs 0.28) with the upstream GD config. We did not find the cause.
 
 ## What each experiment is
 
@@ -104,53 +104,53 @@ Each row is one sub-folder of the [video folder](https://drive.google.com/drive/
 
 | Environment | Task | Goal of an episode | Success |
 |---|---|---|---|
-| **PointMaze** (D4RL U-maze, MuJoCo) | Move a point mass (green dot) through a U-shaped maze | A start and a goal position drawn independently from the free space (`goal_source=random_state`) | Position within 0.5 of the goal position |
-| **PushT** | Push a T-shaped block with a circular agent | Start: a state on a held-out demonstration. Goal: the state 25 env steps later on the same demonstration (`goal_source=dset`), so it is reachable in 25 steps | Agent and block positions within 20 (4-D L2, 512 px canvas) and block angle within π/9 |
-| **Wall** | Move a dot from one room to the other through a door in a wall | Start and goal in opposite rooms; wall and door positions taken from validation trajectories | Position within 4.5 (env units) of the goal |
-| **Rope** (NVIDIA FleX) | Push a rope with an xArm6 pusher | Start: a particle state from a random validation trajectory. Goal: the reset rope shape, translated and rotated | No success test (upstream's test is always false); the metric is the Chamfer distance |
-| **Granular** (NVIDIA FleX) | Push granular particles with an xArm6 pusher | Start as for Rope. Goal: the reset particle pile, translated and scaled | as Rope |
+| PointMaze (D4RL U-maze, MuJoCo) | Move a point mass (green dot) through a U-shaped maze | A start and a goal position drawn independently from the free space (`goal_source=random_state`) | Position within 0.5 of the goal position |
+| PushT | Push a T-shaped block with a circular agent | Start: a state on a held-out demonstration. Goal: the state 25 env steps later on the same demonstration (`goal_source=dset`). The goal is reachable in 25 steps | Agent and block positions within 20 (4-D L2, 512 px canvas) and block angle within π/9 |
+| Wall | Move a dot from one room to the other through a door in a wall | Start and goal in opposite rooms. Wall and door positions are taken from validation trajectories | Position within 4.5 (env units) of the goal |
+| Rope (NVIDIA FleX) | Push a rope with an xArm6 pusher | Start: a particle state from a random validation trajectory. Goal: the reset rope shape, translated and rotated | No success test. Upstream's test is false for every episode. The metric is the Chamfer distance |
+| Granular (NVIDIA FleX) | Push granular particles with an xArm6 pusher | Start as for Rope. Goal: the reset particle pile, translated and scaled | as Rope |
 
 ### World models
 
-- **Released** (PointMaze, PushT, Wall): checkpoints from the authors' [OSF project](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28). They are frozen DINOv2 ViT-S/14 patch features + ViT predictor + VQ-VAE decoder (decoder used only for the videos and the prediction-quality metric).
-- **Ours** (Rope, Granular): trained with upstream `train.py` on the OSF datasets for 100 epochs (history 1, frameskip 1, batch 32, upstream default learning rates; [SETTINGS.md §4.2](repro/SETTINGS.md)).
+- Released (PointMaze, PushT, Wall): checkpoints from the authors' [OSF project](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28). Each model consists of frozen DINOv2 ViT-S/14 patch features, a ViT predictor and a VQ-VAE decoder. The decoder is used only for the videos and the prediction-quality metric.
+- Ours (Rope, Granular): trained with upstream `train.py` on the OSF datasets for 100 epochs (history 1, frameskip 1, batch 32, upstream default learning rates). See [SETTINGS.md §4.2](repro/SETTINGS.md).
 
 ### Planners (upstream `conf/plan*.yaml` and `conf/planner/*.yaml` unless noted)
 
-- **MPC-CEM**: CEM plans 5 actions ahead (300 samples, top 30; 10 opt steps for PointMaze and Wall, 30 for PushT, Rope and Granular). All 5 actions are executed in the simulator, then the agent replans from the observation it reached. Upstream has no limit on the number of replanning iterations, so we capped them: PointMaze and Wall at 20, PushT at 10, Rope and Granular at 5. An episode counts as solved as soon as it succeeds after any iteration (upstream behaviour). Iterations used: PointMaze 4 (all episodes solved), PushT 10, Wall 20.
-- **Open-loop CEM**: CEM plans the whole horizon (5 actions) once and the plan is executed without feedback. With the MPC settings (10 opt steps for PointMaze and Wall, 30 for PushT) this is exactly MPC iteration 1. That is what we compare with the paper's "CEM" column: PointMaze 0.86, PushT 0.90, Wall 0.54 vs. 0.80 / 0.86 / 0.74. The `pointmaze_cem30` and `wall_cem30` folders, the open-loop CEM rows of the results table, are an extra run with the default of upstream `conf/planner/cem.yaml` (30 opt steps); PushT needs no such run because its MPC setting already uses 30.
-- **Open-loop GD**: gradient descent on the action sequence through the world model (upstream `conf/planner/gd.yaml`: SGD lr 1, 1000 steps, noise 0.003).
-- The planning objective is the MSE between the world model's predicted final latent and the goal observation's latent (plus a proprioception term for PushT and Wall). The simulator executes and scores the plan. As in upstream, the planners also read the simulator's success test while planning: CEM and GD stop optimizing once every episode has succeeded, and MPC stops replanning an episode once it has succeeded ([gaoyuezhou/dino_wm#26](https://github.com/gaoyuezhou/dino_wm/issues/26)).
+- MPC-CEM: CEM plans 5 actions ahead (300 samples, top 30). It runs 10 opt steps for PointMaze and Wall, and 30 for PushT, Rope and Granular. All 5 actions are executed in the simulator. The agent then replans from the observation it reached. Upstream has no limit on the number of replanning iterations. We capped them at 20 for PointMaze and Wall, 10 for PushT, and 5 for Rope and Granular. An episode counts as solved once it succeeds after any iteration. This rule is upstream behaviour. PointMaze used 4 iterations, after which all episodes were solved. PushT used 10 and Wall used 20.
+- Open-loop CEM: CEM plans the whole horizon (5 actions) once and the plan is executed without feedback. With the MPC settings (10 opt steps for PointMaze and Wall, 30 for PushT), open-loop CEM is the same computation as MPC iteration 1. We compare this setting with the paper's "CEM" column. Ours are PointMaze 0.86, PushT 0.90, Wall 0.54. The paper reports 0.80 / 0.86 / 0.74. The `pointmaze_cem30` and `wall_cem30` folders are the open-loop CEM rows of the results table. They are an extra run with the default of upstream `conf/planner/cem.yaml` (30 opt steps). PushT needs no such run because its MPC setting uses 30.
+- Open-loop GD: gradient descent on the action sequence through the world model (upstream `conf/planner/gd.yaml`: SGD lr 1, 1000 steps, noise 0.003).
+- The planning objective is the MSE between the world model's predicted final latent and the goal observation's latent. PushT and Wall add a proprioception term. The simulator executes and scores the plan. As in upstream, the planners also read the simulator's success test while planning ([gaoyuezhou/dino_wm#26](https://github.com/gaoyuezhou/dino_wm/issues/26)). CEM and GD stop optimizing once every episode has succeeded. MPC stops replanning an episode once it has succeeded.
 
 ### Metrics
 
-- **Success rate**: fraction of the 50 episodes that pass the success test above. Open-loop planners are scored on the state after the whole plan (5 planned actions = 25 env steps). MPC is scored on the state at the end of the first replanning iteration after which the episode passed, or after the last iteration if it never passed (upstream behaviour, so MPC success is sticky).
-- **Chamfer distance (CD)**: between the final particle positions and the goal particle positions (xyz, sum of the two directional mean nearest-neighbour distances), averaged over the 10 instances. Lower is better.
+- Success rate: fraction of the 50 episodes that pass the success test above. Open-loop planners are scored on the state after the whole plan (5 planned actions = 25 env steps). MPC is scored on the state at the end of the first replanning iteration after which the episode passed, or after the last iteration if it never passed. This scoring is upstream behaviour. An episode that passed once stays counted as a success.
+- Chamfer distance (CD): the distance between the final particle positions and the goal particle positions (xyz, sum of the two directional mean nearest-neighbour distances), averaged over the 10 instances. Lower is better.
 
 ## How to read the videos
 
-Every folder holds `output_final_<i>_<tag>.mp4` for episodes `i` = 0–9: the first 10 of the 50 evaluated episodes, or all 10 instances for Rope and Granular. `<tag>` is `success` or `failure` from the final evaluation. Rope and Granular videos are always tagged `failure`, because upstream's success test for them is always false; judge them by CD.
+Every folder contains `output_final_<i>_<tag>.mp4` for episodes `i` = 0–9. The episodes are the first 10 of the 50 evaluated episodes, or all 10 instances for Rope and Granular. `<tag>` is `success` or `failure` from the final evaluation. Every Rope and Granular video is tagged `failure`, because upstream's success test for them is false for every episode. The metric for these two environments is CD.
 
 Each frame is a 2 × 2 grid with a label in every panel:
 
 | | left | right |
 |---|---|---|
-| top | **Real**: the simulator executing the planned actions | **Goal**: the goal observation |
-| bottom | **Model**: the world model's prediction for the same actions, decoded to pixels | **Goal** |
+| top | Real: the simulator executing the planned actions | Goal: the goal observation |
+| bottom | Model: the world model's prediction for the same actions, decoded to pixels | Goal |
 
-- **PointMaze, PushT, Wall**: 12 fps, one frame per simulator step. The Model panel changes every 5 frames, once per planned action (frameskip 5). MPC videos show the whole executed trajectory up to the iteration at which the episode succeeded. Every video ends by holding its last frame for 3 s; there are no gray padding frames.
-- **PushT**: the light-green T is drawn by the environment at a fixed pose in every image (also in training data). It is **not** the goal. The red outline in Real and Model is the goal pose of the block (in these converted videos it was fitted to the Goal panel, within 3 px (512 px canvas) and 2° of the true goal pose; new runs draw the goal state directly).
-- **PointMaze**: the red ring marks the goal position. Its radius is the success radius 0.5, with four ticks pointing at the goal. Frames show the position one 0.01 s physics sub-step behind the state used for scoring. So an episode that ends right at the boundary can look just outside the ring (episode 4 of `pointmaze_mpc`).
-- **Wall**: no overlay. The goal is the dot in the Goal panel.
-- **Rope, Granular**: 24 fps. These come from a re-run that keeps the intermediate simulator frames, so the xArm is seen pushing ([`repro/eval/deform_arm_video.py`](repro/eval/deform_arm_video.py)). The data and the standard evaluator keep only one frame per push, taken after the arm has returned home. The Model panel advances when each push finishes. The re-run used the same model, settings, seed and start/goal particle states. FleX simulation and rendering are not bit-reproducible across processes, though (the Rope re-run also ran on the other of our two GPUs, and its rendered start/goal images already differ slightly; the Granular re-run matches the evaluated run for two MPC iterations and then diverges). So per-instance results differ from the evaluated run: final CD is 1.045 vs 0.933 for Rope and 0.224 vs 0.216 for Granular.
+- PointMaze, PushT, Wall: 12 fps, one frame per simulator step. The Model panel changes every 5 frames, once per planned action (frameskip 5). MPC videos show the whole executed trajectory up to the iteration at which the episode succeeded. Every video ends with its last frame shown for 3 s. There are no gray padding frames.
+- PushT: the light-green T is drawn by the environment at a fixed pose in every image, including the training data. It is not the goal. The red outline in Real and Model is the goal pose of the block. In these converted videos the outline was fitted to the Goal panel, within 3 px (512 px canvas) and 2° of the true goal pose. New runs draw the outline from the goal state.
+- PointMaze: the red ring marks the goal position. Its radius is the success radius 0.5. The ring has four ticks pointing at the goal. Frames show the position one 0.01 s physics sub-step behind the state used for scoring. An episode that ends at the boundary can appear slightly outside the ring. Episode 4 of `pointmaze_mpc` is an example.
+- Wall: no overlay. The goal is the dot in the Goal panel.
+- Rope, Granular: 24 fps. These videos are from a re-run that keeps the intermediate simulator frames ([`repro/eval/deform_arm_video.py`](repro/eval/deform_arm_video.py)). The xArm is seen pushing in these frames. The data and the standard evaluator keep one frame per push, taken after the arm has returned home. The Model panel advances when each push finishes. The re-run used the same model, settings, seed and start/goal particle states. FleX simulation and rendering are not bit-reproducible across processes. The Rope re-run also ran on the other of our two GPUs, and its rendered start/goal images differ slightly. The Granular re-run matches the evaluated run for two MPC iterations and then diverges. Per-instance results differ from the evaluated run. Final CD is 1.045 vs 0.933 for Rope and 0.224 vs 0.216 for Granular.
 
-The plotted frames, labels and overlays are drawn after the metrics are computed. With the overlay on and off, `logs.json` is byte-identical and the start/goal file (`plan_targets.pkl`) holds the same values (also byte-identical for PointMaze; for PushT only the pickle bytes differ). Old videos were converted with `repro/eval/{pusht_goal_overlay,pointmaze_goal_overlay,reformat_eval_videos}.py`.
+The plotted frames, labels and overlays are drawn after the metrics are computed. With the overlay on and off, `logs.json` is byte-identical and the start/goal file (`plan_targets.pkl`) contains the same values. For PointMaze the start/goal file is also byte-identical. For PushT its pickle bytes differ. Old videos were converted with `repro/eval/{pusht_goal_overlay,pointmaze_goal_overlay,reformat_eval_videos}.py`.
 
 ## Additional results
 
-These are not in the video folder.
+The results in this section are not in the video folder.
 
-**MPC success rate vs. number of replanning iterations** (iteration 1 = open-loop CEM):
+MPC success rate vs. number of replanning iterations (iteration 1 = open-loop CEM):
 
 | Iterations | 1 | 2 | 3 | 4 | 5–10 | 11–20 |
 |---|---|---|---|---|---|---|
@@ -158,41 +158,41 @@ These are not in the video folder.
 | PushT | 0.90 | 0.92 | 0.92 | 0.92 | 0.92 | (cap 10) |
 | Wall | 0.54 | 0.86 | 0.94 | 0.94 | 0.94 | 0.94 |
 
-**PointMaze over three seeds** (99, 1, 101; 50 episodes each). Mean success: MPC 0.987 (paper 0.98), open-loop CEM with 10 steps 0.82 (0.80), CEM with 30 steps 0.87, GD 0.25 (0.22). The gaps to the paper are within seed-to-seed variation. Re-running seed 99 with the original code path (original attention, no skipping of solved episodes) gives the same success rates for open-loop CEM (at every one of the 30 opt steps) and for MPC iteration 1 (0.86); the other logged metrics agree to within 3e-4 relative, consistent with the ~1e-6 latent difference of fp32 SDPA attention. GD is chaotic and changes (0.20 → 0.14).
+PointMaze over three seeds (99, 1 and 101), 50 episodes each. Mean success: MPC 0.987 (paper 0.98), open-loop CEM with 10 steps 0.82 (paper 0.80), CEM with 30 steps 0.87, GD 0.25 (paper 0.22). The gaps to the paper are within seed-to-seed variation. Re-running seed 99 with the original code path (original attention, no skipping of solved episodes) gives the same success rates for open-loop CEM at each of the 30 opt steps and for MPC iteration 1 (0.86). The other logged metrics agree to within 3e-4 relative, which is consistent with the ~1e-6 latent difference of fp32 SDPA attention. GD is chaotic and its result changes (0.20 → 0.14).
 
-**Rope and Granular, MPC iterations** (CD after each iteration; the actions so far replayed from the start):
+Rope and Granular, MPC iterations (CD after each iteration, with the actions so far replayed from the start):
 
 | Iteration | 1 | 2 | 3 | 4 | 5 | final evaluation | paper |
 |---|---|---|---|---|---|---|---|
 | Rope | 1.199 | 1.320 | 0.918 | 0.686 | 0.909 | 0.933 | 0.41 |
 | Granular | 0.409 | 0.304 | 0.223 | 0.223 | 0.222 | 0.216 | 0.26 |
 
-The final evaluation replays the same actions as iteration 5 and gives a different CD, because FleX results depend on execution history (issue #2). We also retrained Rope with the predictor learning rate listed in the paper's Table 12 (5e-5 instead of upstream's 5e-4). Decoded prediction quality improved (LPIPS 0.043 → 0.018, SSIM 0.963 → 0.985), but the gain comes from the decoder (reconstruction LPIPS 0.039 → 0.012), whose settings were unchanged and which planning does not use; the predictor's latent prediction loss got slightly worse (0.071 → 0.079). Planning did not improve (CD 1.157; two runs of the 5e-4 model gave 0.933 and 1.045), so the learning rate does not explain the Rope gap.
+The final evaluation replays the same actions as iteration 5 and gives a different CD, because FleX results depend on execution history (issue #2). We also retrained Rope with the predictor learning rate listed in the paper's Table 12, which is 5e-5. Upstream uses 5e-4. Decoded prediction quality improved (LPIPS 0.043 → 0.018, SSIM 0.963 → 0.985). The gain is due to the decoder (reconstruction LPIPS 0.039 → 0.012). The decoder settings were unchanged, and planning does not use the decoder. The predictor's latent prediction loss got slightly worse (0.071 → 0.079). Planning did not improve. CD was 1.157 with the retrained model, and two runs of the 5e-4 model gave 0.933 and 1.045. The learning rate does not explain the Rope gap.
 
-**Prediction quality** (decoded one-step prediction on the validation split — for PointMaze and Wall 5000 evenly spaced slices of 16200 / 7872 — VGG LPIPS ↓ / SSIM ↑; paper Table 4 and 9. The paper does not state its prediction horizon or sample count, so the comparison is approximate):
+Prediction quality. The metric is VGG LPIPS ↓ / SSIM ↑ of the decoded one-step prediction on the validation split. For PointMaze and Wall it is computed on 5000 evenly spaced slices of 16200 / 7872. Paper numbers are from Table 4 and 9. The comparison is approximate, because the paper does not state its prediction horizon or sample count:
 
 | | PointMaze | PushT | Wall | Rope | Granular |
 |---|---|---|---|---|---|
 | Ours | 0.0006 / 0.999 | 0.0067 / 0.987 | 0.0022 / 0.997 | 0.043 / 0.963 | 0.102 / 0.901 |
 | Paper | – | 0.007 / 0.985 | 0.0016 / 0.997 | 0.009 / 0.985 | 0.035 / 0.94 |
 
-For Rope and Granular, plain encode–decode reconstruction of the target frame is already almost as poor as the prediction. So the gap comes mostly from the decoder, not the predictor.
+For Rope and Granular, encode–decode reconstruction of the target frame is almost as poor as the prediction. The gap is mostly due to the decoder.
 
-**Not reproduced:** Reacher (data and environment were not released), the baselines IRIS / DreamerV3 / TD-MPC2 / AVDC (not in the codebase), the generalization environments (the WallRandom and PushObj datasets were not released; GranularRandom needs changes to the environment code), and the encoder and ablation studies (they need many retrained models, and the mask and decoder-loss ablations need code changes). See [SETTINGS.md §1](repro/SETTINGS.md).
+Not reproduced: Reacher, the baselines IRIS / DreamerV3 / TD-MPC2 / AVDC, the generalization environments, and the encoder and ablation studies. The Reacher data and environment were not released. The baselines are not in the codebase. The WallRandom and PushObj datasets were not released, and GranularRandom needs changes to the environment code. The encoder and ablation studies need many retrained models, and the mask and decoder-loss ablations need code changes. See [SETTINGS.md §1](repro/SETTINGS.md).
 
 ## Running it
 
-Hardware used: two 24 GB GPUs (RTX 3090 Ti + RTX 3090) on Ubuntu 24.04. Setup scripts and the job queue are in `repro/` ([repro/README.md](repro/README.md), Korean). Run the commands below in one bash or zsh shell, from the repo root. The code blocks contain no `#` comments on purpose: zsh without `setopt interactivecomments` (the default unless e.g. oh-my-zsh turns it on) passes an inline `# ...` to the command as arguments.
+Hardware used: two 24 GB GPUs (RTX 3090 Ti + RTX 3090) on Ubuntu 24.04. Setup scripts and the job queue are in `repro/` ([repro/README.md](repro/README.md), Korean). Run the commands below in one bash or zsh shell, from the repo root. The code blocks contain no `#` comments on purpose. Without `setopt interactivecomments`, zsh passes an inline `# ...` to the command as arguments. This option is off by default, and oh-my-zsh, for example, turns it on.
 
-**Requirements**
+Requirements:
 
-- An NVIDIA driver, `git curl bzip2 unzip zip gcc`, and `libglew-dev libgl1-mesa-dev` for building mujoco-py. mujoco-py builds its GPU (EGL) renderer if `/usr/lib/nvidia` exists (Ubuntu's driver packages create it) and a CPU renderer otherwise, which also needs `libosmesa6-dev`.
+- An NVIDIA driver, `git curl bzip2 unzip zip gcc`, and `libglew-dev libgl1-mesa-dev` for building mujoco-py. mujoco-py builds its GPU (EGL) renderer if `/usr/lib/nvidia` exists. Ubuntu's driver packages create this directory. Otherwise mujoco-py builds a CPU renderer, which also needs `libosmesa6-dev`.
 - For Rope and Granular planning: docker with the NVIDIA container runtime, usable without sudo (`docker` group).
 - Disk space in the work root `$DINO_WORK` (default `~/dinowm`): about 110 GB for PointMaze, PushT and Wall (Python env 9 GB, data 91 GB, checkpoints 1 GB, zip files 6 GB), and about 160 GB more for Rope and Granular (data 144 GB, zip files 15 GB, plus a 15 GB temporary file while unzipping). The zip files in `$DINO_WORK/downloads` can be deleted after unzipping. If your home directory is small, choose a work root on a larger disk.
 
-**Install**
+Install:
 
-Nothing assumes your home directory. The commands below clone the repo into the current directory; it can live anywhere. `DINO_WORK` is the work root for the env, data, checkpoints and run outputs, and can be any path outside the repo. `~/dinowm` in the third line is only the default: if your home directory is small, replace it with a path on a larger disk (see the disk space above).
+Nothing assumes your home directory. The commands below clone the repo into the current directory. The repo can be placed anywhere. `DINO_WORK` is the work root for the env, data, checkpoints and run outputs, and can be any path outside the repo. `~/dinowm` in the third line is the default. If your home directory is small, replace it with a path on a larger disk (see the disk space above).
 
 ```bash
 git clone https://github.com/jongmin-s-multicore/thread0.git
@@ -201,24 +201,24 @@ export DINO_WORK=~/dinowm
 bash repro/setup/install_env.sh
 ```
 
-Every script reads `DINO_WORK` from the environment and falls back to `~/dinowm`. If you choose another path, set it again in every new shell (for example in `~/.bashrc`), or write `export DINO_WORK=${DINO_WORK:-/your/path}` into `.claude/env.local.sh` in the repo (gitignored; `repro/env.sh` reads it first).
+Every script reads `DINO_WORK` from the environment and uses `~/dinowm` if it is not set. If you choose another path, set it again in every new shell (for example in `~/.bashrc`), or write `export DINO_WORK=${DINO_WORK:-/your/path}` into `.claude/env.local.sh` in the repo. This file is gitignored, and `repro/env.sh` reads it first.
 
-`install_env.sh` creates a micromamba env (Python 3.9 with the pinned versions of `environment.yaml`), installs MuJoCo 2.1.0 into `~/.mujoco/mujoco210` (where mujoco-py looks by default; set `MUJOCO_DIR` to use another path) and builds mujoco-py. It installs the pip packages (about 4 GB of downloads) with uv if `uv` is on `PATH`, otherwise with pip. `bash repro/setup/install_env.sh --dry-run` prints the commands without running them.
+`install_env.sh` creates a micromamba env (Python 3.9 with the pinned versions of `environment.yaml`), installs MuJoCo 2.1.0 into `~/.mujoco/mujoco210` and builds mujoco-py. mujoco-py looks for MuJoCo in this directory by default. Set `MUJOCO_DIR` to use another path. The script installs the pip packages (about 4 GB of downloads) with uv if `uv` is on `PATH`, otherwise with pip. `bash repro/setup/install_env.sh --dry-run` prints the commands without running them.
 
-For Rope and Granular only, build PyFleX (in docker):
+PyFleX is needed for Rope and Granular only. Build it in docker:
 
 ```bash
 bash repro/setup/install_pyflex.sh
 ```
 
-**Data and released checkpoints** from the authors' OSF project. `core` is PointMaze, PushT and Wall; `deformable` is Rope and Granular. If a download is interrupted, run the same command again and it resumes.
+Data and released checkpoints are downloaded from the authors' OSF project. `core` is PointMaze, PushT and Wall. `deformable` is Rope and Granular. If a download is interrupted, run the same command again and it resumes.
 
 ```bash
 bash repro/setup/download_data.sh core checkpoints
 bash repro/setup/download_data.sh deformable
 ```
 
-**Check and one quick planning run.** `source repro/env.sh` sets the paths and puts the env's `python` first on `PATH`; run it in every new shell. `check_env.sh` tests torch/CUDA, mujoco-py and DINOv2, then replays dataset actions in PointMaze, PushT and Wall and compares the frames with the dataset (`check_env.sh --pyflex` adds Rope and Granular). The `plan.py` command plans 2 episodes with the released PointMaze model (under a minute) and writes to `$DINO_RUNS/smoke/point_maze`.
+Check and one quick planning run. `source repro/env.sh` sets the paths and puts the env's `python` first on `PATH`. Run it in every new shell. `check_env.sh` tests torch/CUDA, mujoco-py and DINOv2, then replays dataset actions in PointMaze, PushT and Wall and compares the frames with the dataset. `check_env.sh --pyflex` adds Rope and Granular. The `plan.py` command plans 2 episodes with the released PointMaze model and writes to `$DINO_RUNS/smoke/point_maze`. It takes under a minute.
 
 ```bash
 source repro/env.sh
@@ -227,27 +227,27 @@ python plan.py --config-name plan_point_maze.yaml model_name=point_maze ckpt_bas
   n_evals=2 planner.sub_planner.opt_steps=2 planner.max_iter=1 hydra.run.dir=$DINO_RUNS/smoke/point_maze
 ```
 
-**All benchmark jobs** (`repro/jobs/benchmark.txt`) run in a background job queue; its log is `$DINO_RUNS/scheduler.log`. GPUs, jobs per GPU and free-memory thresholds are set with environment variables ([repro/README.md](repro/README.md), "머신별 설정").
+All benchmark jobs (`repro/jobs/benchmark.txt`) run in a background job queue. The queue log is `$DINO_RUNS/scheduler.log`. GPUs, jobs per GPU and free-memory thresholds are set with environment variables ([repro/README.md](repro/README.md), "머신별 설정").
 
 ```bash
 bash repro/queue/start.sh
 ```
 
-**What was tested.** On 2026-10-09 we ran the commands above on the machine above in bash, with an empty home directory, a clean environment (`env -i`) and pip (no uv on `PATH`). Every step succeeded, including `check_env.sh --pyflex` and the quick planning run. Not repeated in that run: the `core` and `deformable` downloads (we linked our existing data instead; the `checkpoints` download, which uses the same downloader, was run) and the job queue. In a separate Ubuntu 24.04 container without `/usr/lib/nvidia`, the mujoco-py build failed without `libosmesa6-dev` and succeeded with it; its PointMaze frames differ from the dataset frames by a mean of 0.03 on the 0–255 scale (0.00 with the GPU renderer). Other Linux distributions and other GPUs are untested.
+What was tested. On 2026-10-09 we ran the commands above on the machine above in bash, with an empty home directory, a clean environment (`env -i`) and pip (no uv on `PATH`). Every step succeeded, including `check_env.sh --pyflex` and the quick planning run. The `core` and `deformable` downloads and the job queue were not repeated in that run. For those two downloads we linked our existing data. The `checkpoints` download, which uses the same downloader, was run. In a separate Ubuntu 24.04 container without `/usr/lib/nvidia`, the mujoco-py build failed without `libosmesa6-dev` and succeeded with it. The PointMaze frames rendered in that container differ from the dataset frames by a mean of 0.03 on the 0–255 scale (0.00 with the GPU renderer). Other Linux distributions and other GPUs are untested.
 
 ## Branches and changes to upstream
 
-- **`main`**: upstream `0a9492f` plus fixes and features that apply to any GPU environment, and the reproduction tooling in `repro/`. Every edited upstream block carries a `[repro]` comment: `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`.
-- **[`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local)**: `main` plus memory/speed changes for 24 GB GPUs and the run records of the results above (`repro/LOCAL.md`, `repro/runs/`). All results in this README were produced with this branch's code (LOCAL.md §6 maps each job to the commit it ran from). The changes are fp32 SDPA attention, chunked CEM rollouts and GD, decoding only the plotted rollouts, skipping CEM for episodes MPC already solved, and validation under `no_grad`. They keep the computation identical or within 1.4e-6 relative error, except that skipping solved episodes changes MPC from iteration 2 on (iteration 1 is identical): the remaining episodes draw random numbers in a different order, and the inner CEM's early stop checks only the still-unsolved episodes instead of all 50.
+- `main`: upstream `0a9492f` plus fixes and features that apply to any GPU environment, and the reproduction tooling in `repro/`. Every edited upstream block has a `[repro]` comment. To list the edits, run `git diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore'`.
+- [`hanbin5/local`](https://github.com/jongmin-s-multicore/thread0/tree/hanbin5/local): `main` plus memory/speed changes for 24 GB GPUs and the run records of the results above (`repro/LOCAL.md`, `repro/runs/`). All results in this README were produced with this branch's code. LOCAL.md §6 maps each job to the commit it ran from. The changes are fp32 SDPA attention, chunked CEM rollouts and GD, decoding only the plotted rollouts, skipping CEM for episodes that MPC has solved, and validation under `no_grad`. With one exception, they keep the computation identical or within 1.4e-6 relative error. The exception is skipping solved episodes, which changes MPC from iteration 2 on. Iteration 1 is identical. With skipping, the remaining episodes draw random numbers in a different order, and the inner CEM's early stop checks the unsolved episodes. Without skipping it checks all 50.
 
 Changes on `main`:
 
 | File | Change | Effect on results |
 |---|---|---|
-| `models/dino.py` | Pin the DINOv2 torch.hub code to `85a2460` (Python 3.9; upstream issue #25) | none (identical features) |
-| `env/deformable_env/.../flex_env.py` | Call `pyflex.init()` once per process (several envs segfaulted) | none |
-| `train.py` | Also write epoch metrics to `epoch_logs.jsonl` (for runs without wandb) | none |
-| `planning/evaluator.py` | Evaluation videos: panel labels, end at the last executed frame, 3 s hold | videos only |
+| `models/dino.py` | Pin the DINOv2 torch.hub code to `85a2460` (Python 3.9, upstream issue #25) | none (identical features) |
+| `env/deformable_env/.../flex_env.py` | Call `pyflex.init()` once per process, because several envs segfaulted | none |
+| `train.py` | Also write epoch metrics to `epoch_logs.jsonl`, for runs without wandb | none |
+| `planning/evaluator.py` | Evaluation videos: panel labels, end at the last executed frame, last frame shown for 3 s | videos only |
 | `plan.py`, `env/pusht/goal_outline.py` | PushT: outline the goal block pose on plots/videos | plots/videos only (`logs.json` identical) |
 | `plan.py`, `env/pointmaze/goal_marker.py` | PointMaze: ring of the success radius at the goal position on plots/videos | plots/videos only (`logs.json` identical) |
 
@@ -255,4 +255,4 @@ Protocol choices that differ from upstream defaults, such as the MPC iteration c
 
 ## License
 
-Code is MIT like upstream ([LICENSE](LICENSE), © gaoyuezhou); `repro/` and our changes are MIT as well. Datasets and released checkpoints come from the authors' [OSF project](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) and are not redistributed here, nor are our trained weights. The upstream README is kept as [README_upstream.md](README_upstream.md); repository conventions are in [AGENTS.md](AGENTS.md) (Korean).
+Code is MIT like upstream ([LICENSE](LICENSE), © gaoyuezhou). `repro/` and our changes are MIT as well. Datasets and released checkpoints are from the authors' [OSF project](https://osf.io/bmw48/?view_only=a56a296ce3b24cceaf408383a175ce28) and are not redistributed here. Our trained weights are not redistributed either. The upstream README is kept as [README_upstream.md](README_upstream.md). Repository conventions are in [AGENTS.md](AGENTS.md) (Korean).
