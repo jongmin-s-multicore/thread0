@@ -35,6 +35,7 @@
 - PointMaze 작업은 env 워커 50개의 mujoco-py EGL 컨텍스트로 약 5 GB 를 더 쓴다. 학습과 같은 GPU 에 두면 MPC 는 시작 직후, GD 는 첫 스텝·첫 평가에서 OOM 이었다. GPU 하나에 작업 여러 개를 돌릴 때는 overlay 로 PointMaze 작업에 `need=` 를 크게 준다.
 - 원본 코드로는 MPC 반복이 쌓이면 평가 디코딩(50개 × 프레임 전부)이, 학습에서는 검증 forward 가 OOM 이었다 (2절의 수정으로 해결).
 - Pour Water 학습 (num_hist 3, frameskip 5, 224): 배치 32 는 24 GB 에서 OOM 이다 (디코더 conv 에서, 23.7 GB 점유 뒤). 2절의 `decoder_loss_pred` 수정을 넣고도 같았다. 배치 24 는 최대 19.8 GB (nvidia-smi). num_hist 1 은 배치 24 에서 7.1 GB.
+- Cloth Move·Push Sand·Stack Cube 학습 (num_hist 1, frameskip 5, 224, 배치 24): 7.1 GB. 평가(`eval_acwm_phys.py`)는 학습 작업과 같은 GPU 에서 같이 돈다.
 
 ## 4. 계산 시간 (이 환경에서 측정)
 
@@ -47,10 +48,12 @@
 | FleX 롤아웃 (env 1개, prepare 포함 push 3번) | Rope 18.7 s, Granular 45 s |
 | Pour Water 학습, 배치 24, 6 epoch (epoch = 슬라이스 전부 한 번) | num_hist 3: 0.88 s/it (RTX 3090), epoch 10,327 it + 검증 약 2.7 h, 총 16.1 h. num_hist 1: 0.37 s/it (RTX 3090 Ti), epoch 10,695 it 약 1.2 h, 총 7.0 h. 샘플당 약 37 ms 로 배치와 무관 |
 | Pour Water 평가 (`eval_pour_water.py`, 에피소드 198개) | 약 23–26 분 (num_hist 1 23 분, num_hist 3 26 분) |
+| Cloth Move·Push Sand·Stack Cube 학습, num_hist 1, 배치 24 | GPU 를 혼자 쓸 때 2.75 it/s (0.36 s/it), 같은 GPU 에 학습 둘이면 각 1.3 it/s. Cloth Move 15 epoch 6.8 h (RTX 3090 Ti), Push Sand 18 epoch 7.4 h (RTX 3090), Stack Cube 25 epoch 7.1 h (RTX 3090 Ti). Push Sand 와 Stack Cube 는 일부 구간에서 평가 작업과 GPU 를 나눠 썼다. 슬라이스 하나를 읽는 데 13–26 ms, DataLoader 12 worker 로 배치 24 에 0.09–0.19 s |
+| 위 세 환경의 평가 | `eval_acwm_phys.py`: Cloth Move 400 에피소드 48 분, Push Sand 379 에피소드 57 분 (둘 다 학습과 GPU 공유), Stack Cube 476 에피소드 35 분 (단독). `eval_acwm_phys_quant.py` 약 1 분 (CPU), `render_acwm_phys.py` 20–90 초 |
 
 ## 5. 실행 기록
 
-`repro/runs/{train,eval}/<run-id>/run.yaml` 에 실행별 설정을 둔다 (결과 수치 없음). `source repro/env.sh && python3 repro/make_run_yaml.py` 로 `repro/jobs/` 의 작업 목록(`benchmark.txt`, 추가 실행 `pointmaze_extra.txt`·`rope_plr.txt`)과 `$DINO_RUNS/<job>/run_info.txt` 에서 다시 만든다. 큐 밖에서 돌린 팔 영상 재실행도 같이 만든다.
+`repro/runs/{train,eval}/<run-id>/run.yaml` 에 실행별 설정을 둔다 (결과 수치 없음). `source repro/env.sh && python3 repro/make_run_yaml.py` 로 `repro/jobs/` 의 작업 목록(`benchmark.txt`, 추가 실행 `pointmaze_extra.txt`·`rope_plr.txt`·`pour_water.txt`·`acwm_phys.txt`)과 `$DINO_RUNS/<job>/run_info.txt` 에서 다시 만든다. 큐 밖에서 돌린 팔 영상 재실행도 같이 만든다.
 
 | run-id | job | 내용 |
 |---|---|---|
@@ -66,6 +69,8 @@
 | `dinowm_rope-dinov2s14-100ep-plr5e-5`, `…-plr5e-5-at100-{mpccem,predq}` | `train_rope_plr5e-5`, `rope_mpc_plr5e-5`, `pq_rope_plr5e-5` | Rope 재학습, predictor lr 5e-5 (논문 Table 12 값, `jobs/rope_plr.txt`) |
 | `dinowm_pourwater-dinov2s14-6ep-{h3f5,h1f5}` | `train_pw_{h3f5,h1f5}` | ACWM-Phys Pour Water world model, num_hist 3 / 1, frameskip 5, predictor lr 5e-5, 6 epoch, 배치 24 (`jobs/pour_water.txt`, SETTINGS.md §7) |
 | `dinowm_pourwater-dinov2s14-6ep-{h3f5,h1f5}-at6-predq` | `pq_pw_{h3f5,h1f5}` | Pour Water 예측 품질·롤아웃·물 양 평가 (`repro/eval/eval_pour_water.py`) |
+| `dinowm_{clothmove,pushsand,stackcube}-dinov2s14-{15,18,25}ep-h1f5` | `train_{cloth,sand,stack}_h1f5` | ACWM-Phys Cloth Move·Push Sand·Stack Cube world model, num_hist 1, frameskip 5, predictor lr 5e-5, 배치 24 (`jobs/acwm_phys.txt`, SETTINGS.md §8) |
+| `dinowm_{clothmove,pushsand,stackcube}-dinov2s14-{15,18,25}ep-h1f5-at{15,18,25}-predq` | `pq_{cloth,sand,stack}_h1f5`, 이어서 `quant_*`, `render_*` | 위 세 모델의 예측 품질·롤아웃 (`eval_acwm_phys.py`), 물리량 (`eval_acwm_phys_quant.py`), 영상 (`render_acwm_phys.py`). 물리량·영상 명령은 run.yaml 의 `then` 에 있다 |
 | `dinowm_{rope,granular}-dinov2s14-100ep-at100-mpccem-armvideo` | `{rope,granular}_mpc_arm` | `{rope,granular}_mpc` 와 같은 설정의 재실행 + 팔이 움직이는 평가 영상 (`repro/eval/deform_arm_video.py`, 큐 밖에서 실행). 같은 시작·목표 입자 상태지만 비트 단위 재현은 아니다 |
 
 ## 6. 코드 버전과 결과의 대응
@@ -82,6 +87,7 @@
 
 | 이 브랜치 `41606dc` (`run_info.txt` 의 `commit=`; 학습에 쓰는 코드는 `e2bbc0e` 의 `VWorldModel.forward` 수정과 main `d0c66eb` 의 로더) | `train_pw_{h3f5,h1f5}` (파일럿 `train_pw_pilot` 은 `e2bbc0e`, 결과에 쓰지 않는다) |
 | 이 브랜치 `0a75239` (평가 스크립트는 main `1c22b7c` + `dbb03d8`) | `pq_pw_{h3f5,h1f5}` |
+| 브랜치 `hanbin5/acwm-phys` 의 커밋 전 작업 트리 (`run_info.txt` 의 `commit=d0e27aa` 는 그 바탕 커밋). 그 파일들을 내용 그대로 커밋했다: 로더·설정 `ebe1aea`, 작업 목록 `060b292`, 평가 도구 `10e8192` (학습에 쓴 로더·설정 4개는 sha256 을 대조했다) | `train_{cloth,sand,stack}_h1f5` `pq_{cloth,sand,stack}_h1f5` `quant_*` `render_*` (파일럿 `train_{cloth,sand,stack}_pilot` 은 결과에 쓰지 않는다) |
 
 - 앞의 세 줄에 해당하는 작업은 `run_info.txt` 가 이전 형식(`chunk= sdpa= skip_solved= gdchunk=`, 브랜치·커밋 없음)이다. 작업별 코드 위치는 run.yaml 의 `code` 에 적었다. 결과 이슈에는 `hanbin5/local` 의 커밋과 이 대응을 함께 적는다.
 - 태그 설명의 "나누기 전에 시작한 작업은 이 커밋에서 돌았다" 는 `wall_cem30` 에만 맞다. 이 표가 정확하다.
@@ -90,3 +96,5 @@
 - Pour Water 실험(`jobs/pour_water*.txt`, 로더, 평가, 위 두 행)은 브랜치 `hanbin5/water` 에 있다. 실행 당시 이 커밋들의 브랜치 이름은 `hanbin5/local` 이었다 (`run_info.txt` 의 `branch=`). 이 문서의 Pour Water 항목은 그 브랜치의 것이다.
 - Pour Water 의 물 양 분석·그림·정성 비교(`eval_pour_water_volume.py`, `plot_pour_water.py`, `render_pour_water.py`)는 큐 밖에서 main `36834f5` 와 같은 내용의 파일(그때는 커밋 전 main 작업 트리)로 돌렸다. `eval_pour_water.py` 의 "action 0" 변형은 `36834f5` 에서 같은 값(정규화한 0)을 명시적으로 쓰도록 바꿨고 동작은 같다.
 - `repro/eval/eval_pred_quality.py` 는 공개 전 검토에서 부분 표본이 실행마다 달라지는 것을 찾아 `seed(training.seed)` 를 넣었다 (예측 품질 작업은 그 뒤에 시작한다).
+- Cloth Move·Push Sand·Stack Cube 실험(`jobs/acwm_phys*.txt`, 로더, 평가, 위 행)은 브랜치 `hanbin5/acwm-phys` (`hanbin5/water` 위)에 있다. 이 문서의 해당 항목은 그 브랜치의 것이다.
+- 그 실험의 에피소드별 영상(`render_acwm_phys.py --per_episode 10`, Stack Cube 는 `--groups success,fail`)과 면적 그림(`plot_acwm_phys.py`)은 평가가 끝난 뒤 큐 밖에서 만들었다. 저장된 프레임과 JSON 만 읽는다.
