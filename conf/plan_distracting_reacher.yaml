@@ -1,0 +1,50 @@
+# Planning config for the distracting-Reacher experiment.
+#
+# Used by scripts/eval.py (which reads the planner/objective blocks and ignores
+# the hydra block) and usable directly with plan.py for one-off debugging:
+#   python plan.py --config-name plan_distracting_reacher model_name=reacher_clean
+defaults:
+  - _self_
+
+hydra:
+  run:
+    dir: plan_outputs/${now:%Y%m%d%H%M%S}_${replace_slash:${model_name}}_gH${goal_H}
+  sweep:
+    dir: plan_outputs/${now:%Y%m%d%H%M%S}_${replace_slash:${model_name}}_gH${goal_H}
+    subdir: ${hydra.job.num}
+
+ckpt_base_path: ./
+model_name: null
+model_epoch: latest
+
+seed: 99
+n_evals: 10
+goal_source: 'random_state'
+goal_H: 5
+n_plot_samples: 10
+
+debug_dset_init: False
+
+objective:
+  _target_: planning.objectives.create_objective_fn
+  # alpha=0 => the planning cost is the DINOv2 latent L2 ONLY. The whole point of
+  # the experiment is to stress that cost, so proprio must not rescue it.
+  alpha: 0
+  base: 2
+  mode: last
+
+planner:
+  _target_: planning.mpc.MPCPlanner
+  # NOT null: with max_iter=null MPC loops until every episode succeeds, which
+  # under heavy distractors never happens.
+  max_iter: 3
+  n_taken_actions: 5
+  sub_planner:
+    target: planning.cem.CEMPlanner
+    horizon: 5
+    topk: 30
+    num_samples: 300
+    var_scale: 1
+    opt_steps: 30
+    eval_every: 1
+  name: mpc_cem

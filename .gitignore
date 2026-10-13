@@ -1,6 +1,8 @@
 # upstream (gaoyuezhou/dino_wm)
 __pycache__
 *.pyc
+
+# training / planning outputs (hydra run dirs, checkpoints, plots, videos)
 outputs
 plan_outputs
 
@@ -50,3 +52,11 @@ wandb/
 /repro/runs/**
 !/repro/runs/**/
 !/repro/runs/**/run.yaml
+
+# distracting-reacher experiment (thread1 occlusion0): hydra multirun dirs, stage markers, local EXP_ROOT
+multirun
+.submitit
+/exp
+.state
+# rclone credentials must never be committed
+rclone.conf

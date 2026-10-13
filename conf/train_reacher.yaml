@@ -1,0 +1,46 @@
+# Training config for the distracting-Reacher experiment.
+#
+# Inherits everything from train.yaml and changes only what the experiment needs.
+# Models A and B MUST differ in nothing but `env` (i.e. which render of the paired
+# dataset they read), so all knobs live here rather than on the command line.
+#
+#   python train.py --config-name train_reacher env=distracting_reacher_clean
+#   python train.py --config-name train_reacher env=distracting_reacher_distract
+#
+# scripts/train.sh wraps this and pins hydra.run.dir so that interrupted runs
+# resume (train.py reloads ${saved_folder}/checkpoints/model_latest.pth).
+defaults:
+  - train
+  - override env: distracting_reacher_clean
+  - _self_
+
+# A plain `python train.py` never touches the launcher, but keeping submitit as
+# the default makes local -m sweeps fail confusingly.
+hydra:
+  run:
+    dir: ${ckpt_base_path}/outputs/${exp_name}
+  sweep:
+    dir: ${ckpt_base_path}/outputs/${exp_name}
+    subdir: ${hydra.job.num}
+
+# set by scripts/train.sh; also the resume key, so it must be stable per model
+exp_name: reacher_unnamed
+
+frameskip: 5
+num_hist: 3
+num_pred: 1
+img_size: 224
+
+training:
+  epochs: 100
+  batch_size: 32
+  save_every_x_epoch: 1
+
+# The decoder is not needed for planning, but its reconstructions are how you
+# see *what the model thinks it sees* under a video background, which is the
+# qualitative half of this experiment. Set has_decoder=false to save ~25% time.
+has_decoder: true
+has_predictor: true
+
+plan_settings:
+  plan_cfg_path: null   # planning evals are run separately by scripts/eval.py
