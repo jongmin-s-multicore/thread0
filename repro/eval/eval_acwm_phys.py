@@ -38,7 +38,12 @@ from eval_pour_water import pix, boot, boot_ratio, acwm_metrics, rollout, to_u8,
 
 WINDOW = 37  # ACWM-Phys eval.py seq_len
 N_CUTS = 10  # eval.py default test_cuts (the configs say 5; the paper does not say which)
-OBS_HW = {"acwm_cloth_move": (240, 240), "acwm_push_sand": (240, 400), "acwm_stack_cube": (240, 240)}  # ACWM data_config obs_shape
+OBS_HW = {"acwm_cloth_move": (240, 240), "acwm_push_sand": (240, 400), "acwm_stack_cube": (240, 240),  # ACWM data_config obs_shape
+          "acwm_push_cube": (240, 240), "acwm_push_rope": (240, 240), "acwm_robot_arm": (240, 240), "acwm_reacher": (240, 240)}
+# Push Rope ood_test episodes whose video pusher leaves the recorded action positions (up to 96 px at 512; train max 2.6 px)
+ROPE_PUSHER_OFF = {f"episode_{i}.mp4" for i in (0, 1, 3, 4, 5, 6, 10, 12, 13, 15, 16)}
+# Robot Arm ood_test episodes whose cumulative actions stay inside the training range (the other 95 leave it)
+ARM_INSIDE = {f"episode_{i}.mp4" for i in (13, 25, 27, 28, 30, 39, 49, 52, 54, 72)}
 PIX = ("lpips", "ssim", "mse")
 
 
@@ -69,6 +74,17 @@ def episode_groups(env, set_name, base, idxs):
             label = np.array([str(meta[n]["ood_label"]) for n in names])
             for lab in sorted(set(label)):
                 groups[lab] = np.where(label == lab)[0]
+    num = np.array([int("".join(c for c in n.split(".")[0] if c.isdigit()) or -1) for n in names])
+    if env == "acwm_push_cube" and set_name == "ood_test":  # episode_0-19 have one cube, 20-49 five (frame-0 colour areas)
+        groups["1cube"], groups["5cubes"] = np.where(num < 20)[0], np.where(num >= 20)[0]
+    if env == "acwm_push_cube" and set_name == "ind_test":  # episode_0-31 three cubes, 32-47 four, 48-49 two
+        groups["3cubes"], groups["4cubes"] = np.where(num < 32)[0], np.where((num >= 32) & (num < 48))[0]
+    if env == "acwm_push_rope" and set_name == "ood_test":
+        off = np.array([n in ROPE_PUSHER_OFF for n in names])
+        groups["pusher_ok"], groups["pusher_off"] = np.where(~off)[0], np.where(off)[0]
+    if env == "acwm_robot_arm" and set_name == "ood_test":
+        inside = np.array([n in ARM_INSIDE for n in names])
+        groups["inside"], groups["outside"] = np.where(inside)[0], np.where(~inside)[0]
     return groups, names
 
 
