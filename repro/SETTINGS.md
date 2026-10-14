@@ -12,6 +12,7 @@ DINO-WM([arXiv:2411.04983](https://arxiv.org/abs/2411.04983) v2, 코드 [gaoyuez
 | Table 8 "GD" | PointMaze, PushT, Wall | 공개 체크포인트 | 오픈루프 GD | 성공률 | 50 | `<env>_gd` |
 | 추가 | PointMaze, Wall | 공개 체크포인트 | 오픈루프 CEM, planner 그룹 기본값 30 opt steps | 성공률 | 50 | `<env>_cem30` |
 | Table 1, 8 Rope·Granular | Rope, Granular | 이 실험에서 학습 (§4.2) | MPC-CEM | Chamfer distance | 10 | `train_<obj>`, `<obj>_mpc` |
+| 추가 (Table 8 "GD" 의 Rope·Granular 칸은 NA) | Rope, Granular | 이 실험에서 학습 (§4.2) | 오픈루프 GD | Chamfer distance | 10 | `<obj>_gd` |
 | Table 4, 9 | PushT, Wall, Rope, Granular (+PointMaze) | 위와 같음 | – | 디코딩한 1-step 예측의 LPIPS·SSIM | 검증 분할 | `pq_<env>` |
 
 job 이름은 `repro/jobs/benchmark.txt` 에 적힌 이름이다. 각 실행의 설정 기록(run-id 와 run.yaml)은 그 실행을 수행한 환경 브랜치의 `repro/runs/` 에 있다.
@@ -124,7 +125,7 @@ upstream 설정 파일의 값을 쓴다. 바꾼 값은 굵게 표시했다.
 
 - MPC-CEM (`planning/mpc.py`): CEM 으로 `goal_H` 길이를 계획하고 계획한 행동 모두(`n_taken_actions = goal_H`)를 env 에서 실행한 뒤, 도달한 관측에서 다시 계획한다. 매 반복 끝에 처음부터 지금까지의 행동 전체를 env 에서 다시 실행해 성공을 판정한다. 한 번 성공한 에피소드는 이후에도 성공으로 센다. 성공한 뒤의 행동은 0 이다. `logs.json` 의 `mpc/success_rate`(step = 반복 횟수)가 예산별 성공률이다.
 - 오픈루프 CEM = MPC 1회차: `n_taken_actions = horizon` 이라서 MPC 의 첫 반복은 같은 CEM 설정으로 계획한 행동열을 피드백 없이 끝까지 실행하는 것과 같은 계산이다. seed·목표·난수 순서도 같다. Table 8 "CEM" 과의 비교에는 MPC step 1 값을 쓴다. 논문은 오픈루프 CEM 의 opt steps 를 적지 않았으므로 planner 그룹 기본값(30)을 쓰는 변형 `cem30` 을 PointMaze·Wall 에서 따로 실행한다. PushT 는 MPC 설정의 opt steps 가 30 이다.
-- 오픈루프 GD (`conf/planner/gd.yaml`): 행동을 표준정규 초기화, SGD lr 1, 1000 스텝, 매 스텝 잡음 0.003. 10 스텝마다 env 에서 평가하고 모두 성공하면 멈춘다.
+- 오픈루프 GD (`conf/planner/gd.yaml`): 행동을 표준정규 초기화, SGD lr 1, 1000 스텝, 매 스텝 잡음 0.003. 10 스텝마다 env 에서 평가하고 모두 성공하면 멈춘다. Rope·Granular (`<obj>_gd`) 는 `planner.eval_every=1000` 으로 opt step 0 에서만 env 평가를 하고, 1000 스텝 뒤에 최종 평가를 한다.
 - CEM·GD 모두 env 의 실제 성공을 조기 종료에만 쓴다. upstream 과 같다 (dino_wm issue #26).
 
 ### 5.4 예측 품질 (Table 4, 9)
