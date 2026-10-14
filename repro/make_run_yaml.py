@@ -204,9 +204,11 @@ for j in parse_jobs():
                             seed=int(h.get("seed", 99)))
             if pl == "gd":
                 variant = "gd"
+                ev = h.get("planner.eval_every")
                 planner = dict(name="오픈루프 GD (conf/planner/gd.yaml)", gd="horizon = goal_H 5, SGD lr 1, 1000 steps, action_noise 0.003, randn 초기화",
-                               eval_every=10)
-                read = "logs.json 의 final_eval/success_rate"
+                               eval_every=f"{ev} (시뮬 평가는 opt step 0 과 끝난 뒤 최종 평가만)" if ev else 10)
+                read = ("logs.json 의 final_eval/mean_chamfer_distance" if env_name in ("rope", "granular")
+                        else "logs.json 의 final_eval/success_rate")
             elif pl == "cem":
                 variant = "cem30"
                 planner = dict(name="오픈루프 CEM (conf/planner/cem.yaml)", cem="horizon = goal_H 5, samples 300, topk 30, var_scale 1, opt_steps 30",

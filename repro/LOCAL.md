@@ -56,6 +56,7 @@
 | `dinowm_{pointmaze,pusht,wall}-released-at{10,2,65}-gd` | `{pointmaze,pusht,wall}_gd` | 오픈루프 GD |
 | `dinowm_{pointmaze,wall}-released-at{10,65}-cem30` | `{pointmaze,wall}_cem30` | 오픈루프 CEM, 30 opt steps |
 | `dinowm_{rope,granular}-dinov2s14-100ep-at100-mpccem` | `{rope,granular}_mpc` | 학습한 모델 MPC-CEM, Chamfer distance |
+| `dinowm_{rope,granular}-dinov2s14-100ep-at100-gd` | `{rope,granular}_gd` | 학습한 모델 오픈루프 GD, Chamfer distance. 모델·시드·시작/목표 상태는 `{rope,granular}_mpc` 와 같다 |
 | `dinowm_{pointmaze,pusht,wall}-released-at{10,2,65}-predq`, `dinowm_{rope,granular}-dinov2s14-100ep-at100-predq` | `pq_{pointmaze,pusht,wall,rope,granular}` | 예측 품질 |
 | `dinowm_pointmaze-released-at10-{mpccem,cem30,gd}-{s1,s101}` | `pointmaze_{mpc,cem30,gd}_{s1,s101}` | PointMaze seed 1·101. 나머지 설정은 seed 99 실행과 같다 (`jobs/pointmaze_extra.txt`) |
 | `dinowm_pointmaze-released-at10-{mpccem,cem30,gd}-orig` | `pointmaze_{mpc,cem30,gd}_orig` | seed 99, 원본 코드 경로 (`DINO_WM_SDPA=0 DINO_WM_SKIP_SOLVED=0`) |
@@ -64,7 +65,7 @@
 
 ## 6. 코드 버전과 결과의 대응
 
-결과를 낸 코드는 모두 upstream `0a9492f` + main 공용 수정 + 2절 수정이다. 작업마다 그 코드가 있던 위치만 다르다. 아래 작업이 모두 끝난 뒤 main 의 평가 영상 수정을 merge 했다 (merge `2daa991`). 이 수정의 내용은 칸 라벨, 실행 끝에서 끊고 3초 멈춤, PushT·PointMaze 목표 표시다. 수정한 파일은 `planning/evaluator.py` `plan.py` `env/pusht/goal_outline.py` `env/pointmaze/goal_marker.py` 다. `git diff archive/2026-10-01-pre-split hanbin5/local -- . ':!repro' ':!*.md' ':!.gitignore'` 에는 이 그림·영상 수정만 나온다. 이 수정은 지표를 계산한 뒤 그림·영상만 바꾼다. 표시를 그리는 실행과 그리지 않는 실행에서 `logs.json` 이 같다 (SETTINGS.md §6). 지표를 내는 코드는 아래 모든 경우에 같다.
+결과를 낸 코드는 모두 upstream `0a9492f` + main 공용 수정 + 2절 수정이다. 작업마다 그 코드가 있던 위치만 다르다. `rope_gd`·`granular_gd` 를 뺀 아래 작업이 모두 끝난 뒤 main 의 평가 영상 수정을 merge 했다 (merge `2daa991`). 이 수정의 내용은 칸 라벨, 실행 끝에서 끊고 3초 멈춤, PushT·PointMaze 목표 표시다. 수정한 파일은 `planning/evaluator.py` `plan.py` `env/pusht/goal_outline.py` `env/pointmaze/goal_marker.py` 다. `git diff archive/2026-10-01-pre-split hanbin5/local -- . ':!repro' ':!*.md' ':!.gitignore'` 에는 이 그림·영상 수정만 나온다. 이 수정은 지표를 계산한 뒤 그림·영상만 바꾼다. 표시를 그리는 실행과 그리지 않는 실행에서 `logs.json` 이 같다 (SETTINGS.md §6). 지표를 내는 코드는 아래 모든 경우에 같다.
 
 | 코드가 있던 곳 | 작업 |
 |---|---|
@@ -73,6 +74,7 @@
 | 나누기 전 main `3a4341b`, 태그 [`archive/2026-10-01-pre-split`](https://github.com/jongmin-s-multicore/thread0/tree/archive/2026-10-01-pre-split) | `wall_cem30` |
 | 이 브랜치 `798234f` (`run_info.txt` 의 `commit=`) | `pointmaze_gd` `pointmaze_cem30` `{rope,granular}_mpc` `pq_*` |
 | 이 브랜치 `a482f6e` (`run_info.txt` 의 `commit=`). `repro/` 밖 코드는 `798234f` 와 같다 | `pointmaze_{mpc,cem30,gd}_{s1,s101,orig}` `train_rope_plr5e-5` `rope_mpc_plr5e-5` `pq_rope_plr5e-5`. `{rope,granular}_mpc_arm` 은 이 코드의 `plan.py` 를 `repro/eval/deform_arm_video.py` 로 실행했다. 이 파일은 그때 main 작업 트리의 커밋 전 파일이었고, 같은 동작으로 main `5180303` 에 커밋했다 |
+| 이 브랜치 `a6691fd` (`run_info.txt` 의 `commit=`). `repro/` 밖 코드는 `798234f` 에 평가 영상 수정(merge `2daa991`)을 더한 것이다 | `rope_gd` `granular_gd` |
 
 - 앞의 세 줄에 해당하는 작업은 `run_info.txt` 가 이전 형식(`chunk= sdpa= skip_solved= gdchunk=`)이다. 이전 형식에는 브랜치와 커밋이 없다. 작업별 코드 위치는 run.yaml 의 `code` 에 적었다. 결과 이슈에는 `hanbin5/local` 의 커밋과 이 대응을 함께 적는다.
 - 태그 설명의 "나누기 전에 시작한 작업은 이 커밋에서 실행됐다" 는 `wall_cem30` 에만 맞다. 위 표가 정확하다.

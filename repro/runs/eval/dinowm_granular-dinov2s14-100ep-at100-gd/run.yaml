@@ -1,0 +1,36 @@
+# 이 실행이 무엇이었는지의 단일 출처 (repro/make_run_yaml.py 로 생성). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_granular-dinov2s14-100ep-at100-gd
+kind: eval
+stack: dinowm
+job: granular_gd
+date: 2026-10-14
+env: granular
+model:
+  source: 직접 학습 runs/train/dinowm_granular-dinov2s14-100ep
+  ckpt: $DINO_TRAIN/outputs/train_granular/checkpoints/model_latest.pth
+  epoch: 100
+  num_hist: 1
+  frameskip: 1
+planner:
+  name: 오픈루프 GD (conf/planner/gd.yaml)
+  gd: 'horizon = goal_H 5, SGD lr 1, 1000 steps, action_noise 0.003, randn 초기화'
+  eval_every: 1000 (시뮬 평가는 opt step 0 과 끝난 뒤 최종 평가만)
+protocol:
+  n_evals: 10
+  goal_source: random_state
+  goal_H: 5
+  objective: '마지막 프레임 latent MSE, alpha 1 (plan.yaml 기본값)'
+  seed: 99
+command: >-
+  CKPT_BASE=$DINO_TRAIN bash repro/queue/run_plan.sh granular_gd <gpu> --config-name plan.yaml
+  model_name=train_granular planner=gd planner.eval_every=1000 n_evals=10 goal_source=random_state
+  goal_H=5
+runner_env: >-
+  DINO_WM_GD_CHUNK=8 DINO_WM_ROLLOUT_CHUNK=150 DINO_WM_SDPA=1 DINO_WM_SKIP_SOLVED=1 (run_info.txt; 청크는
+  합산 순서만 바꾼다, LOCAL.md §2)
+code: >-
+  hanbin5/local a6691fd. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + 이 브랜치의 24 GB 수정 (git
+  diff 0a9492f -- . ':!repro' ':!*.md' ':!.gitignore')
+output: $DINO_RUNS/granular_gd/
+results: logs.json 의 final_eval/mean_chamfer_distance
+job_env: 'CKPT_BASE=$DINO_TRAIN (jobs/benchmark.txt)'
