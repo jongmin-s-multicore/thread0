@@ -1,3 +1,27 @@
+# 211shyn/ACWM-baseline: RTX PRO 6000 Max-Q 한 장 환경
+
+이 브랜치는 `hanbin5/acwm-phys` (`f195786`) 위에서 이슈 #4 의 ACWM-Phys baseline 학습·평가를 실행한다. 0절이 이 브랜치의 환경과 측정이다. 1절부터는 `hanbin5/local` 에서 물려받은 내용이고 그 환경(24 GB GPU 2장)의 기록이다.
+
+## 0. 이 브랜치의 환경과 측정
+
+| 항목 | 값 |
+|---|---|
+| GPU | NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition 96 GB (300 W) 4장 중 한 장만 쓴다. NVIDIA driver 580.178.04 |
+| 호스트 | Ubuntu 22.04, AMD Threadripper PRO 9955WX (16 코어 32 스레드), RAM 251 GB |
+| 소프트웨어 | conda 환경, Python 3.9, PyTorch 2.7.1+cu128 (Blackwell 은 레포 고정 환경 torch 2.3.0+cu121 로 돌지 않는다) |
+
+`repro/colab/acwm_long.py` 한 step(배치 24, num_hist 1, 224 px, TF32 + bf16 autocast)의 시간. 별도 벤치마크 스크립트로 쟀다.
+
+| 항목 | 값 |
+|---|---|
+| 디코더 forward + backward + Adam (프레임 48장) | 42.5 ms. channels_last·`cudnn.benchmark` 는 차이가 없었다. fp32 (TF32) 는 73.4 ms |
+| predictor 만 (`VWorldModel`, 디코더 없이) | 72 it/s |
+| predictor + 디코더, Cloth Move 40 에피소드 | 18 it/s, `--compile` 19.7 it/s |
+| 같은 GPU 에 프로세스 4개 | 디코더 각 186 ms (합산 21.5 step/s), predictor 각 16.7 it/s (합산 67 it/s). 한 프로세스가 이미 GPU 를 다 쓴다 |
+| CUDA MPS | 사용자 권한으로 `nvidia-cuda-mps-control -d` 가 뜨지 않았다. 쓰지 않았다 |
+
+동시에 돌려도 합산 속도가 같으므로 큐(`DINO_SLOTS_PER_GPU=3`)는 학습 사이 평가를 겹치는 데만 쓴다. 남은 계산량(디코더 단계 약 168만 step × 50 ms + predictor 단계 약 413만 step × 14 ms)으로 잡은 총 시간은 약 40 시간이다.
+
 # hanbin5/local: 24 GB GPU 2장 환경
 
 이 브랜치는 main 위에 24 GB GPU 에 맞춘 구현과 이 환경에서 실행한 기록을 더한다 ([AGENTS.md §1](../AGENTS.md#1-무엇을-어디에-두나)).

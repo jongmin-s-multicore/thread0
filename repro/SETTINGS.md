@@ -251,3 +251,42 @@ SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])�
 - **속도·정밀도.** RTX PRO 6000 (Blackwell, 96 GB, Colab `G4`) 에서 배치 24 로 fp32 46 it/s, TF32 67 it/s, TF32 + bfloat16 autocast 81 it/s 였고 본 실행은 TF32 + bfloat16 로 했다 (검증 손실 차이 0.0005). 세 환경을 한 GPU 에서 CUDA MPS 로 같이 돌려 각 31–36 it/s, 8배까지 3시간 55분 걸렸다. 토큰은 GPU 메모리를 Cloth Move 18 GB, Push Sand 16 GB, Stack Cube 11 GB 쓴다.
 - **평가.** `repro/colab/ckpt_tools.py merge` 로 새 가중치를 원래 체크포인트(디코더 포함)에 넣고, `repro/eval/trend_acwm_phys.py` 로 InD·OoD 테스트 에피소드의 전체 롤아웃 마지막 프레임을 §8.3 의 색 마스크로 잰다. 원래 학습의 중간 epoch 체크포인트도 같은 스크립트로 쟀다 (Cloth Move 5·10·15, Push Sand 6·12·18, Stack Cube 5–25): 중반 이후 OoD 값이 움직이지 않는 것은 이어 학습하기 전에도 보였다.
 - 환경마다 한 번 돌렸다.
+
+## 9. 추가 실험: ACWM-Phys baseline (이슈 #4, 8개 환경)
+
+ACWM-Phys 논문의 ACWM-DiT-S 와 같은 테스트 창·같은 프레임에서 DINO-WM 을 비교하려고, DINO-WM 을 ACWM-DiT-S 가 본 학습량 이상으로 학습한다. 계획·근거는 이슈 #4 에 있다. 실행 기록과 이 환경의 측정은 브랜치 `211shyn/ACWM-baseline` 의 `repro/LOCAL.md` 0절과 `repro/runs/` 에 있다.
+
+### 9.1 학습량
+
+단위는 "5프레임 간격으로 예측한 프레임 수"다. DINO-WM (frameskip 5, num_hist 1) 의 학습 샘플 하나가 예측 프레임 하나이고, ACWM-DiT 의 37프레임 창 하나는 5프레임 간격 예측 프레임 7개에 해당한다. ACWM-DiT-S 를 논문대로 GPU 8장(step 당 창 32개)으로 보면 100,000 step × 32 × 7 = 2,240만이다. DINO-WM 은 배치 24 로 933,334 step 이면 2,240만이다. 모든 환경의 predictor 목표를 933,334 step 으로 둔다 (이전 학습의 step 포함).
+
+### 9.2 학습 (`repro/colab/acwm_long.py`, 작업 목록 `repro/jobs/acwm_baseline.txt`)
+
+| 항목 | 값 |
+|---|---|
+| 모델·손실·옵티마이저 | §8.2 와 같다. frameskip 5, num_hist 1, 배치 24, predictor AdamW lr 5e-5, action·proprio encoder AdamW lr 5e-4, 디코더 Adam lr 3e-4, `train.py` 와 같은 손실 |
+| 계산 경로 | 인코더(DINOv2 ViT-S/14)는 동결이라 학습·검증 에피소드의 모든 프레임 토큰을 한 번 계산해 둔다 (float16). 디코더 목표는 dataset transform 을 거친 224 px 프레임을 uint8 로 둔다 (양자화 오차의 MSE 는 약 5e-6, [−1, 1] 기준). 매 step 같은 배치 창 24 개로 predictor 와 디코더를 한 번씩 갱신한다. 디코더 입력은 실제 프레임의 토큰이다 (`train.py` 의 `z.detach()` 와 같다) |
+| 정밀도 | TF32, bf16 autocast (손실은 float32), `torch.compile` |
+| 검증·저장 | 20,000 step 마다 검증 에피소드의 모든 창에서 z_visual_loss 와 그 창 프레임의 재구성 MSE 를 잰다. 가장 낮은 predictor·디코더를 평가에 쓴다. 이어 학습용 state 를 매번 쓴다 |
+| 디코더 상한 | 원래 실행 디코더 step 의 4배 (Cloth Move 247,500, Push Sand 260,064, Stack Cube 248,600, Pour Water 256,680), 새 환경 250,000. 재구성 MSE 가 직전 최저값보다 0.5 % 이상 줄지 않는 평가가 5번(100,000 step) 이어지면 더 일찍 멈춘다 |
+| 시작점 | Cloth Move·Push Sand·Stack Cube·Push Rope 는 이슈 #4 §8 의 Colab 실행이 멈춘 state (HF `hanbin5/dino-wm-acwm-phys` `baseline_x15/`, predictor step 515,000 / 540,128 / 517,200 / 20,000). Pour Water 는 6 epoch 체크포인트 (`train_pw_h1f5`, step 64,170). Push Cube·Robot Arm·Reacher 는 처음부터 |
+| 분할 | `ind_train` 을 0.9 / 0.1 (seed 42) 로 나눈다. 기존 환경과 Push Rope 의 분할은 Colab 실행 로그의 에피소드 번호와 같다 (확인함) |
+
+### 9.3 새 환경 4개의 데이터 설정
+
+action 이 어느 프레임 전이를 만드는지는 이슈 #4 §5 의 확인(영상의 물체 추적과 회귀, 두 스크립트로 같은 결과)을 따랐다. 이 브랜치에서 다시 확인하지 않았다. 에피소드 수·프레임 수·영상 형식은 이 브랜치에서 metadata 와 영상을 모두 읽어 셌다.
+
+| 환경 | HF 폴더 | 학습 → 학습 / 검증 | ind_test | ood_test | 프레임 (영상) | action (모델 입력) | 설정 |
+|---|---|---|---|---|---|---|---|
+| Push Cube | `rigid_dynamics/push_block` | 1500 → 1350 / 150 | 50 | 50 | 66 (1024×1024) | `pair_next`: (a[t], a[t+1]), 4차원 | `conf/env/acwm_push_cube.yaml` |
+| Push Rope | `deformable/push_rope` | 1500 → 1350 / 150 | 50 | 50 | 64 (512×512) | `next`: a[t+1] (밀판 x, z) | `conf/env/acwm_push_rope.yaml` |
+| Robot Arm | `kinematics/robot_arm_64` | 2002 − 6 → 1796 / 200 | 105 | 105 | 64 (480×640, 자르지 않고 224×224 로 줄인다) | `raw`: a[t] (관절 각 변화 7) | `conf/env/acwm_robot_arm.yaml` |
+| Reacher | `kinematics/reacher` | 9993 − 907 → 8177 / 909 | 100 | 100 − 11 = 89 | 37 (240×240) | `angle_next`: a[t+1] 두 관절 각의 cos, sin | `conf/env/acwm_reacher.yaml` |
+
+- 영상이 없는 metadata 항목은 건너뛴다 (Reacher `ind_train` metadata 40,000 개 중 영상 9,993 개).
+- `match_video_length`: 영상 프레임 수가 metadata `length` 와 다른 항목을 뺀다. Reacher 의 옛 형식 영상(480×480, 50프레임: 학습 907, OoD 11)과 Robot Arm 의 action 보다 짧은 학습 영상 6개(`episode_1, 104, 106, 114, 115, 127`, 38–61프레임)가 빠진다.
+- OoD 그룹: Push Cube `cubes1` (episode 0–19) / `cubes5` (20–49), Robot Arm `inside` (누적 action 이 모든 관절에서 학습 에피소드의 누적 action 범위 안, 10개) / `outside` (95개). Push Rope 의 `pusher_off` 그룹(이슈 #4 §5, 11개)은 목록이 없어 만들지 않았다. 테스트 세트마다 `first50` (metadata 순서 앞 50개, ACWM `eval.py --max_trajs 50` 이 보는 에피소드)도 낸다.
+
+### 9.4 평가
+
+`repro/eval/eval_acwm_phys.py` (Pour Water 는 `eval_pour_water.py`) 의 "acwm" 블록이 ACWM-DiT-S 와 비교하는 값이다. 37프레임 창, 에피소드마다 시작 10곳 (Reacher 는 에피소드가 37프레임이라 1곳), 프레임 5·10·…·35 (Pour Water 는 15·…·35), ACWM `data_config.py` 의 obs_shape (새 환경은 모두 240×240), 움직임 마스크는 창 프레임 0·5·…·35 로 만든다. 테스트 에피소드는 전부 쓴다. PSNR 은 창별 PSNR 의 평균과 평균 MSE 로 계산한 값(논문 방식)을 둘 다 적는다.

@@ -35,6 +35,9 @@ repro/
 ├── jobs/pour_water_pilot.txt  ACWM-Phys Pour Water 파일럿 (SETTINGS.md §7)
 ├── jobs/acwm_phys_pilot.txt   ACWM-Phys Cloth Move·Push Sand·Stack Cube 파일럿 (에피소드 60개, 3 epoch)
 ├── jobs/acwm_phys.txt         위 세 환경의 본 학습과 평가·물리량·영상 (로더 datasets/acwm_phys_dset.py, 설정 conf/env/acwm_*.yaml, SETTINGS.md §8). 실행 순서는 루트 README 의 "Reproduce"
+├── jobs/acwm_baseline.txt    ACWM-Phys baseline (이슈 #4): 8개 환경을 predictor 933,334 step 까지 학습하고 평가 (SETTINGS.md §9)
+├── colab/                   토큰을 캐시해 학습하는 스크립트 (train.py 를 거치지 않는다): predictor_long.py (predictor 만), acwm_long.py (predictor + 디코더, 이어 학습 state),
+│                              ckpt_tools.py (체크포인트 변환), acwm_baseline_prep.sh (baseline 시작점·설정 준비)
 ├── eval/
 │   ├── eval_pred_quality.py   검증 분할 전체의 1-step 예측 LPIPS·SSIM
 │   ├── eval_pour_water.py     ACWM-Phys Pour Water 예측 품질: 한 스텝·열린 루프 롤아웃·전체 에피소드·action 민감도, 기준선 (SETTINGS.md §7.3)
