@@ -1,7 +1,11 @@
-"""ACWM-Phys Cloth Move / Push Sand / Stack Cube 예측 품질 평가 (DINO-WM). 지표와 기준선은 eval_pour_water.py 와 같다.
+"""ACWM-Phys Cloth Move / Push Sand / Stack Cube / Push Cube / Push Rope / Robot Arm / Reacher 예측 품질 평가 (DINO-WM).
+지표와 기준선은 eval_pour_water.py 와 같다.
 
 세트: val (학습 데이터에서 train.py 와 같은 분할로 뗀 검증 에피소드), ind_test, ood_test.
 그룹: Cloth Move ood_test 는 smaller / larger (파일 이름), Stack Cube 는 success / fail (metadata) 와 ood_test 의 up·down·left·right.
+      [repro] 이슈 #4: 테스트 세트마다 first50 (metadata 순서 앞 50개, ACWM eval.py --max_trajs 50 이 보는 에피소드).
+      Push Cube ood_test 는 cubes1 (episode 0-19) / cubes5 (20-49), Robot Arm ood_test 는 inside / outside
+      (누적 action 이 모든 관절에서 학습 에피소드의 누적 action 범위 안인가). Reacher 는 에피소드가 37프레임이라 시작 1곳만 잰다.
 
   M1  한 스텝: 문맥 num_hist 프레임으로 다음 프레임 예측 (LPIPS(VGG)·SSIM·MSE, 224, [-1, 1]), 잠재 MSE.
       기준선 copy_last, recon_copy(마지막 문맥 프레임을 인코더·디코더에 통과), recon_ceiling(정답 프레임을 인코더·디코더에 통과)
@@ -38,7 +42,9 @@ from eval_pour_water import pix, boot, boot_ratio, acwm_metrics, rollout, to_u8,
 
 WINDOW = 37  # ACWM-Phys eval.py seq_len
 N_CUTS = 10  # eval.py default test_cuts (the configs say 5; the paper does not say which)
-OBS_HW = {"acwm_cloth_move": (240, 240), "acwm_push_sand": (240, 400), "acwm_stack_cube": (240, 240)}  # ACWM data_config obs_shape
+OBS_HW = {"acwm_cloth_move": (240, 240), "acwm_push_sand": (240, 400), "acwm_stack_cube": (240, 240),  # ACWM data_config obs_shape
+          "acwm_push_cube": (240, 240), "acwm_push_rope": (240, 240), "acwm_robot_arm": (240, 240), "acwm_reacher": (240, 240)}
+CUTS_ENV = {"acwm_reacher": 1}  # [repro] 37-frame episodes: the 10 starts would all be the same window
 PIX = ("lpips", "ssim", "mse")
 
 
@@ -55,9 +61,29 @@ class Episode:
         self.n_obs = n
 
 
-def episode_groups(env, set_name, base, idxs):
+def cumulative_inside(base, names, data_path, ds_kw):
+    """[repro] Robot Arm: is the cumulative action (joint angles from the start pose) of each episode inside the per-joint
+    range of the cumulative actions of the training episodes"""
+    def cums(split_path, keep):
+        meta = {Path(e["video_path"]).name: e for e in torch.load(split_path / "metadata.pt", map_location="cpu", weights_only=True)}
+        return [torch.cumsum(meta[n]["actions"].double(), 0) for n in keep]
+    train = ACWMPhysDataset(data_path, "ind_train", **ds_kw)
+    c = torch.cat(cums(train.split_path, train.video_names))
+    lo, hi = c.min(0).values, c.max(0).values
+    return np.array([bool(((x >= lo) & (x <= hi)).all()) for x in cums(base.split_path, names)])
+
+
+def episode_groups(env, set_name, base, idxs, data_path=None, ds_kw=None):
     names = [base.video_names[i] for i in idxs]
     groups = {"all": np.arange(len(idxs))}
+    if set_name in ("ind_test", "ood_test") and len(idxs) > 50:  # [repro]
+        groups["first50"] = np.arange(50)
+    if env == "acwm_push_cube" and set_name == "ood_test":  # [repro]
+        num = np.array([int(n.split("episode_")[-1].split(".")[0]) for n in names])
+        groups["cubes1"], groups["cubes5"] = np.where(num < 20)[0], np.where(num >= 20)[0]
+    if env == "acwm_robot_arm" and set_name == "ood_test":  # [repro]
+        inside = cumulative_inside(base, names, data_path, ds_kw)
+        groups["inside"], groups["outside"] = np.where(inside)[0], np.where(~inside)[0]
     if env == "acwm_cloth_move" and set_name == "ood_test":
         larger = np.array([n.startswith("larger") for n in names])
         groups["smaller"], groups["larger"] = np.where(~larger)[0], np.where(larger)[0]
@@ -123,7 +149,9 @@ def main():
     seed(cfg.training.seed)
     ds_cfg = cfg.env.dataset
     ds_kw = dict(n_rollout=ds_cfg.n_rollout, exclude=list(ds_cfg.exclude), normalize_action=cfg.normalize_action,
-                 action_dims=None if ds_cfg.action_dims is None else list(ds_cfg.action_dims), action_format=ds_cfg.action_format)
+                 action_dims=None if ds_cfg.action_dims is None else list(ds_cfg.action_dims), action_format=ds_cfg.action_format,
+                 exclude_by_split=OmegaConf.to_container(ds_cfg.exclude_by_split) if ds_cfg.get("exclude_by_split") else None)  # [repro]
+    n_cuts = CUTS_ENV.get(env, N_CUTS)
     tf = hydra.utils.instantiate(ds_cfg.transform)
     model = load_model(ck, cfg, cfg.num_action_repeat, dev)
     model.eval()
@@ -154,14 +182,14 @@ def main():
     print(f"time mean built from {nt} training episodes in {time.time() - t0:.0f}s", flush=True)
 
     result = {"model": args.model_name, "env": env, "ckpt_epoch": epoch, "num_hist": H, "frameskip": f, "window_frames": K,
-              "predicted_per_window": S, "n_cuts": N_CUTS, "obs_hw": list(hw), "sets": {}}
+              "predicted_per_window": S, "n_cuts": n_cuts, "obs_hw": list(hw), "sets": {}}
     os.makedirs(os.path.dirname(os.path.abspath(args.out_prefix)), exist_ok=True)
     for name, Sset in sets.items():
         t_set = time.time()
         base, idxs = unwrap(Sset)
         n_ep = len(idxs) if not args.max_eps else min(args.max_eps, len(idxs))
         idxs = idxs[:n_ep]
-        groups, names = episode_groups(env, name, base, idxs)
+        groups, names = episode_groups(env, name, base, idxs, ds_cfg.data_path, ds_kw)
         res = {"n_episodes": int(n_ep), "group_sizes": {g: int(len(v)) for g, v in groups.items()}}
 
         # ---------- M1: one step on slices ----------
@@ -199,7 +227,7 @@ def main():
         print(f"[{name}] M1 done ({len(pick)} slices) {time.time() - t_set:.0f}s", flush=True)
 
         # ---------- M2 / M5 / M3 per episode ----------
-        E, W = n_ep, N_CUTS
+        E, W = n_ep, n_cuts
         k_full = [min(len(base.actions[i]) // f, (base.n_obs[i] - 1) // f) + 1 for i in idxs]  # frames 0, f, 2f, ... of the whole episode
         Kmax = max(k_full)
         methods = ("model", "copy_last", "recon_copy", "recon_ceiling", "copy_first")
@@ -214,7 +242,7 @@ def main():
         up = lambda p: F.interpolate((p.clamp(-1, 1) + 1) / 2, size=hw, mode="bilinear", align_corners=False).permute(0, 2, 3, 1).cpu().numpy()
         for e in range(E):
             ep = Episode(base, idxs[e], tf, hw)
-            cuts = np.linspace(0, ep.n_obs - WINDOW, N_CUTS, dtype=int)
+            cuts = np.linspace(0, ep.n_obs - WINDOW, n_cuts, dtype=int)
             obs, acts = make_windows(ep, f, K, cuts)
             pred, rec, zp, zg, obs_d = rollout(model, obs, acts, H, dev)
             tgt = obs_d[:, H:]
