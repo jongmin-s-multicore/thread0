@@ -1,6 +1,7 @@
 """여러 모델의 전체 에피소드 롤아웃을 같은 에피소드에서 나란히 보여 준다: Real | 모델 1 | 모델 2 ...
 OoD 에피소드를 학습에 넣은 모델(predictor_long.py --extra_split)과 원래 모델을, 학습에 쓰지 않은 OoD 에피소드에서 비교하는 용도다.
 CPU 로도 돈다 (--device cpu). 물체 픽셀 수(Cloth Move 의 천, Push Sand 의 모래)를 각 칸의 라벨에 적는다.
+Stack Cube 는 픽셀 수 대신 그 프레임이 쌓임 판정을 통과하면 라벨에 stacked 라고 적는다.
 
 --ahead K 를 주면 모델마다 칸이 둘이 된다. "<모델> <K*frameskip>-step" 은 매 시점마다 K 모델 스텝 전의 실제 프레임을 주고
 K 스텝을 이어 예측한 것이다 (frameskip 5, K 5 면 25 프레임 앞 = DINO-WM 의 계획 길이). 앞쪽 프레임은 그만큼 이전의 실제 프레임이 없어서
@@ -9,11 +10,13 @@ K 스텝을 이어 예측한 것이다 (frameskip 5, K 5 면 25 프레임 앞 = 
 
 그룹마다 에피소드 N 개를 하나씩 따로 <out_dir>/episodes/<set>_<group>_<순위>_<에피소드>.mp4 로 쓴다.
 순위는 마지막 열 모델의 픽셀 수 오차(스텝 평균)가 작은 쪽이 01 이고, 그룹 안에서 분위가 고르게 퍼지도록 고른다.
-그룹마다 분위 10 %, 50 %, 90 % 에피소드 3개를 세로로 붙인 overview_<set>_<group>.mp4 도 쓴다 (--gif 를 주면 GIF 로도).
+Stack Cube 의 순위는 마지막 프레임의 쌓임 판정이 실제와 같은 에피소드가 먼저다.
+그룹마다 분위 10 %, 50 %, 90 % 에피소드 3개를 세로로 붙인 overview_<set>_<group>.mp4 도 쓴다.
+--gif 를 주면 같은 것을 --gif_scale 배 크기의 GIF 로도 쓴다 (문서에 넣는 용도).
 
 usage (cwd = $DINO_WM, env sourced):
   python repro/eval/render_compare_acwm_phys.py <ckpt_base_path> <out_dir> --models "Original=train_cloth_h1f5:15,With OoD=train_cloth_h1f5_oodmix:15"
-         [--ahead 5] [--sets ind_test,ood_test] [--held_out <model>_split.json] [--per_episode 10] [--scale 2] [--fps 3] [--gif] [--device cuda]
+         [--ahead 5] [--sets ind_test,ood_test] [--held_out <model>_split.json] [--per_episode 10] [--scale 2] [--fps 3] [--gif] [--gif_scale 1] [--device cuda]
 """
 import os, sys, json, argparse
 import numpy as np
@@ -32,6 +35,7 @@ from eval_pour_water import to_u8
 from eval_acwm_phys import episode_groups
 from eval_acwm_phys_quant import measure, AREAS
 from render_acwm_phys import show, write_gif, spread, QUANTILES
+from trend_acwm_phys import is_stacked
 
 
 def main():
@@ -42,6 +46,7 @@ def main():
     ap.add_argument("--held_out", default="", help="<model>_split.json of predictor_long.py: in its extra split, use only the episodes that were not used for training")
     ap.add_argument("--ahead", type=int, default=0, help="model steps of the fixed-horizon column (0 = no such column)")
     ap.add_argument("--gif", action="store_true")
+    ap.add_argument("--gif_scale", type=int, default=1)
     ap.add_argument("--per_episode", type=int, default=10)
     ap.add_argument("--max_eps", type=int, default=0)
     ap.add_argument("--scale", type=int, default=2)
@@ -98,12 +103,13 @@ def main():
 
     cols = ["Real"] + [f"{m[0]} {kind}" for m in models for kind in (f"{K * f}-step", "rollout")] if K else ["Real"] + [m[0] for m in models]
     px = {key: np.array([measure(env, x)[0][obj][0] for x in v]) for key, v in frames.items()} if obj else {}
+    stk = {key: np.array([is_stacked(measure(env, x)[0]) for x in v]) for key, v in frames.items()} if env == "acwm_stack_cube" else {}
 
-    def tile(name, e, k, labelled=True):
+    def tile(name, e, k, scale):
         cells = []
         for c in cols:
-            text = (f"{c}  frame {k * f}" if c == "Real" else c) + (f"  {int(px[(name, e, c)][k]):,} px" if obj else "")
-            cells.append(show(frames[(name, e, c)][k], env, text if labelled else None, args.scale))
+            text = (f"{c}  frame {k * f}" if c == "Real" else c) + (f"  {int(px[(name, e, c)][k]):,} px" if obj else "  stacked" if stk and stk[(name, e, c)][k] else "")
+            cells.append(show(frames[(name, e, c)][k], env, text, scale))
         return np.concatenate(cells, 1)
 
     def clip(rows):
@@ -111,30 +117,34 @@ def main():
 
     out = os.path.join(args.out_dir, "episodes")
     os.makedirs(out, exist_ok=True)
-    picks, summary = {}, {}  # summary: group mean of the object pixels over all episodes of the group, not only the rendered ones
+    picks, summary, overview = {}, {}, {}  # summary: group mean of the object pixels over all episodes of the group, not only the rendered ones
     for name, (d, groups) in data.items():
         for g, mem in groups.items():
             if obj:
                 t0 = H + K - 1 if K else H  # frames before t0 of the fixed-horizon column are not K steps ahead
                 summary[f"{name}/{g}"] = {"n": int(len(mem)), "last_frame": {c: float(np.mean([px[(name, int(e), c)][-1] for e in mem])) for c in cols},
                                           f"frames_from_{t0 * f}": {c: float(np.mean([px[(name, int(e), c)][t0:].mean() for e in mem])) for c in cols}}
-            err = np.array([np.abs(px[(name, int(e), cols[-1])] - px[(name, int(e), "Real")]).mean() if obj else 0.0 for e in mem])
+            if stk:  # share of episodes whose last frame passes the stacked rule
+                summary[f"{name}/{g}"] = {"n": int(len(mem)), "last_frame_stacked": {c: float(np.mean([stk[(name, int(e), c)][-1] for e in mem])) for c in cols}}
+            err = np.array([np.abs(px[(name, int(e), cols[-1])] - px[(name, int(e), "Real")]).mean() if obj else
+                            float(stk[(name, int(e), cols[-1])][-1] != stk[(name, int(e), "Real")][-1]) if stk else 0.0 for e in mem])
             order = mem[np.argsort(err, kind="stable")]
             eps = spread(order, args.per_episode)
-            picks[f"{name}/{g}"] = [{"rank": r + 1, "episode": d.video_names[e], **({f"{obj}_px_last": {c: int(px[(name, e, c)][-1]) for c in cols}} if obj else {})} for r, e in enumerate(eps)]
+            picks[f"{name}/{g}"] = [{"rank": r + 1, "episode": d.video_names[e], **({f"{obj}_px_last": {c: int(px[(name, e, c)][-1]) for c in cols}} if obj else {}),
+                                    **({"stacked_last": {c: bool(stk[(name, e, c)][-1]) for c in cols}} if stk else {})} for r, e in enumerate(eps)]
             for r, e in enumerate(eps):
-                video = clip([tile(name, e, k) for k in range(len(frames[(name, e, "Real")]))])
+                video = clip([tile(name, e, k, args.scale) for k in range(len(frames[(name, e, "Real")]))])
                 stem = os.path.splitext(d.video_names[e])[0]
                 imageio.mimsave(os.path.join(out, f"{name}_{g}_{r + 1:02d}_{stem}.mp4"), video, fps=args.fps, macro_block_size=2)
             if len(order) >= 3:
                 three = [int(order[int(round(qt * (len(order) - 1)))]) for qt in QUANTILES]
                 n_fr = min(len(frames[(name, e, "Real")]) for e in three)
-                video = clip([np.concatenate([tile(name, e, k) for e in three], 0) for k in range(n_fr)])
                 stem = os.path.join(args.out_dir, f"overview_{name}_{g}")
-                imageio.mimsave(stem + ".mp4", video, fps=args.fps, macro_block_size=2)
+                imageio.mimsave(stem + ".mp4", clip([np.concatenate([tile(name, e, k, args.scale) for e in three], 0) for k in range(n_fr)]), fps=args.fps, macro_block_size=2)
+                overview[f"{name}/{g}"] = [d.video_names[e] for e in three]
                 if args.gif:
-                    write_gif(video, stem + ".gif", args.fps)
-    json.dump({"columns": cols, "models": {m[0]: f"{m[1]} epoch {m[2]}" for m in models}, "ahead_model_steps": K, "summary": summary, "picks": picks}, open(os.path.join(out, "picks.json"), "w"), indent=1)
+                    write_gif(clip([np.concatenate([tile(name, e, k, args.gif_scale) for e in three], 0) for k in range(n_fr)]), stem + ".gif", args.fps)
+    json.dump({"columns": cols, "models": {m[0]: f"{m[1]} epoch {m[2]}" for m in models}, "ahead_model_steps": K, "summary": summary, "overview": overview, "picks": picks}, open(os.path.join(out, "picks.json"), "w"), indent=1)
     print("wrote", args.out_dir, "\n", json.dumps({"summary": summary, "picks": picks}, indent=1))
 
 

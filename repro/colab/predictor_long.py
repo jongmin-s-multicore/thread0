@@ -12,7 +12,7 @@
 
 다른 split 의 에피소드를 학습에 섞을 수도 있다 (예: OoD 테스트 에피소드의 일부). --extra_split ood_test --extra_train smaller:even,larger:even
 이면 파일 이름이 smaller_*, larger_* 인 에피소드 중 번호가 짝수인 것을 학습에 넣고 나머지는 검증 세트 ood_smaller, ood_larger 로 따로 잰다
-(규칙: all, none, even, odd). --from_scratch 는 불러온 가중치를 쓰지 않고 epoch 0 부터 새로 학습한다 (설정·분할·action 통계만 slim 에서 가져온다).
+(규칙: all, none, even, odd, mod<M>=<r>.<r>... 는 번호를 M 으로 나눈 나머지가 r 중 하나인 것. 예: mod4=0.1). --from_scratch 는 불러온 가중치를 쓰지 않고 epoch 0 부터 새로 학습한다 (설정·분할·action 통계만 slim 에서 가져온다).
 
 데이터는 slim 설정의 env.dataset (hydra target) 그대로 만든다: Cloth Move·Push Sand·Stack Cube 와 새 환경은 acwm_phys_dset,
 Pour Water 는 acwm_pour_water_dset. data_path 에서 "acwm_phys/" 뒤의 부분만 남기고 <ACWM-Phys root> 아래로 옮긴다.
@@ -37,10 +37,12 @@ from torchvision import transforms
 
 sys.path.insert(0, os.getcwd())
 from datasets.acwm_phys_dset import ACWMPhysDataset
+from datasets.acwm_pour_water_dset import ACWMPourWaterDataset
 from datasets.traj_dset import split_traj_datasets
 from models.visual_world_model import VWorldModel
 
-SUBDIR = {"acwm_cloth_move": "deformable/clothmove", "acwm_push_sand": "particle/push_sand", "acwm_stack_cube": "rigid_dynamics/stack_cube"}
+SUBDIR = {"acwm_cloth_move": "deformable/clothmove", "acwm_push_sand": "particle/push_sand", "acwm_stack_cube": "rigid_dynamics/stack_cube",
+          "acwm_pour_water": "particle/pour_water"}
 
 
 class CachedTokens(nn.Module):
@@ -106,6 +108,9 @@ def pick(names, rules):
         num = int(re.search(r"(\d+)", n.split("episode")[-1]).group(1))
         rule = rules.get(g, "none")
         use = rule == "all" or (rule == "even" and num % 2 == 0) or (rule == "odd" and num % 2 == 1)
+        if rule.startswith("mod"):  # e.g. mod4=0.1: number % 4 in {0, 1}
+            m, rs = rule[3:].split("=")
+            use = num % int(m) in {int(r) for r in rs.split(".")}
         if use:
             train.append(i)
         else:
@@ -141,7 +146,7 @@ def main():
     ap.add_argument("--amp", action="store_true", help="bfloat16 autocast for the predictor forward (the loss is still computed in float32)")
     ap.add_argument("--compile", action="store_true", help="torch.compile the predictor (same math, less per-step overhead)")
     ap.add_argument("--extra_split", default="", help="another split of the same environment whose episodes can join the training set")
-    ap.add_argument("--extra_train", default="", help="group:rule[,group:rule] with rule all|none|even|odd; the other episodes become validation sets ood_<group>")
+    ap.add_argument("--extra_train", default="", help="group:rule[,group:rule] with rule all|none|even|odd|mod<M>=<r>.<r>; the other episodes become validation sets ood_<group>")
     ap.add_argument("--from_scratch", action="store_true")
     ap.add_argument("--eval_only", action="store_true", help="only measure the loaded weights on the validation sets (the training set is not encoded)")
     ap.add_argument("--tag", default="")
@@ -172,6 +177,14 @@ def main():
     ds.data_path = remap(ds.data_path, args.data_root)
     _, trajs = hydra.utils.call(ds, num_hist=H, num_pred=P, frameskip=f)
     dset = trajs["train"].dataset
+    tf = hydra.utils.instantiate(ds.transform)
+    if env == "acwm_pour_water":  # its own loader (action dims 1 and 3)
+        def make(split, **kw):
+            return ACWMPourWaterDataset(ds.data_path, split, transform=tf, normalize_action=cfg.normalize_action, **kw)
+    else:
+        def make(split, **kw):
+            return ACWMPhysDataset(ds.data_path, split, transform=tf, normalize_action=cfg.normalize_action,
+                                   action_dims=None if ds.action_dims is None else list(ds.action_dims), action_format=ds.action_format, **kw)
     assert torch.allclose(dset.action_mean, S["action_mean"]) and torch.allclose(dset.action_std, S["action_std"]), "action statistics differ"
     by_name = {n: i for i, n in enumerate(dset.video_names)}
     tr_idx, va_idx = [by_name[n] for n in S["train_names"]], [by_name[n] for n in S["val_names"]]
@@ -180,9 +193,7 @@ def main():
         tr_idx, va_idx = tr_idx[: args.max_episodes], va_idx[: max(args.max_episodes // 4, 2)]
     sets = {"train": [(dset, i) for i in tr_idx], "valid": [(dset, i) for i in va_idx]}
     if args.extra_split:  # same action normalization as the training data
-        extra = ACWMPhysDataset(os.path.join(args.data_root, SUBDIR[env]), args.extra_split, transform=hydra.utils.instantiate(ds.transform),
-                                normalize_action=cfg.normalize_action, action_dims=None if ds.action_dims is None else list(ds.action_dims),
-                                action_format=ds.action_format, action_stats=(dset.action_mean, dset.action_std))
+        extra = make(args.extra_split, action_stats=(dset.action_mean, dset.action_std))
         ex_train, ex_held = pick(extra.video_names, dict(r.split(":") for r in args.extra_train.split(",") if r))
         if args.max_episodes:
             ex_train, ex_held = ex_train[:4], {g: v[:4] for g, v in ex_held.items()}
