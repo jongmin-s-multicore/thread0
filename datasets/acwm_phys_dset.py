@@ -11,6 +11,16 @@ map to that differs per environment (action_format):
   pose_next  Push Sand. actions[t] is the pusher pose at frame t (x, 0.9, z, quaternion (0, qy, 0, qw)), so the
              transition t -> t+1 is described by the pose at t+1: action t = (x, z, cos yaw, sin yaw) of actions[t+1].
              The quaternion changes sign within episodes (same orientation), which is why the yaw is given as (cos, sin).
+  [repro] Formats of the environments added for the baseline plan (issue #4); the frame each action belongs to was
+  checked by tracking objects in the videos:
+  next       Push Rope. actions[t] is the pusher position (x, z) at frame t: action t = actions[t+1].
+  angle_next Reacher. actions[t] are the two joint angles at frame t: action t = (cos, sin) of each angle of actions[t+1].
+  pair_next  Push Cube. actions[t] is the unit direction of the pusher velocity; the motion of frame t -> t+1 is
+             0.275 actions[t] + 0.725 actions[t+1], so action t = (actions[t], actions[t+1]).
+  Robot Arm uses raw: actions[t] is the joint-angle change of frame t -> t+1.
+
+Metadata entries whose video file is missing are skipped (Reacher lists about 30,000 episodes without a video).
+exclude_by_split drops further video file names per split (e.g. Reacher episodes in an older video format).
 """
 import torch
 import decord
@@ -38,6 +48,12 @@ def pose_next_actions(actions):
     return torch.stack([nxt[:, 0], nxt[:, 2], torch.cos(yaw), torch.sin(yaw)], dim=1)
 
 
+def angle_next_actions(actions):
+    """[repro] (cos, sin) of every angle of the next frame: (T, D) -> (T - 1, 2 D) ordered cos0, sin0, cos1, sin1, ..."""
+    nxt = actions[1:].float()
+    return torch.stack([torch.cos(nxt), torch.sin(nxt)], dim=2).reshape(len(nxt), -1)
+
+
 class ACWMPhysDataset(TrajDataset):
     def __init__(
         self,
@@ -50,20 +66,29 @@ class ACWMPhysDataset(TrajDataset):
         action_dims: Optional[Sequence[int]] = None,
         action_format: str = "raw",
         action_stats: Optional[tuple] = None,
+        exclude_by_split: Optional[dict] = None,
     ):
         self.split_path = Path(data_path) / split
         self.transform = transform
         meta = torch.load(self.split_path / "metadata.pt", map_location="cpu", weights_only=True)
-        exclude = set(exclude)  # video file names
+        # [repro] skip entries without a video file, and the names listed for this split
+        meta = [e for e in meta if (self.split_path / Path(e["video_path"]).name).exists()]
+        exclude = set(exclude) | set((exclude_by_split or {}).get(split, ()))  # video file names
         meta = [e for e in meta if Path(e["video_path"]).name not in exclude]
         if n_rollout:
             meta = meta[:n_rollout]
         self.video_names = [Path(e["video_path"]).name for e in meta]  # Stack Cube stores absolute paths of the source machine
+        dims = list(action_dims) if action_dims is not None else list(range(meta[0]["actions"].shape[1]))
         if action_format == "pose_next":
             self.actions = [pose_next_actions(e["actions"]) for e in meta]
         elif action_format == "raw":
-            dims = list(action_dims) if action_dims is not None else list(range(meta[0]["actions"].shape[1]))
             self.actions = [e["actions"][:, dims].float() for e in meta]
+        elif action_format == "next":  # [repro]
+            self.actions = [e["actions"][1:, dims].float() for e in meta]
+        elif action_format == "angle_next":  # [repro]
+            self.actions = [angle_next_actions(e["actions"][:, dims]) for e in meta]
+        elif action_format == "pair_next":  # [repro]
+            self.actions = [torch.cat([e["actions"][:-1, dims], e["actions"][1:, dims]], 1).float() for e in meta]
         else:
             raise ValueError(f"unknown action_format {action_format}")
         self.seq_lengths = torch.tensor([len(a) for a in self.actions])
@@ -127,6 +152,7 @@ def load_acwm_phys_slice_train_val(
     num_hist=0,
     num_pred=0,
     frameskip=0,
+    exclude_by_split=None,
 ):
     dset = ACWMPhysDataset(
         data_path=data_path,
@@ -137,6 +163,7 @@ def load_acwm_phys_slice_train_val(
         normalize_action=normalize_action,
         action_dims=action_dims,
         action_format=action_format,
+        exclude_by_split=exclude_by_split,
     )
     dset_train, dset_val = split_traj_datasets(dset, train_fraction=split_ratio, random_seed=42)
     num_frames = num_hist + num_pred
@@ -157,6 +184,7 @@ def load_acwm_phys_split(
     normalize_action=False,
     action_dims=None,
     action_format="raw",
+    exclude_by_split=None,
 ):
     """A whole split (ind_test / ood_test) with the action statistics of the training data (same n_rollout/exclude as training)."""
     train = ACWMPhysDataset(
@@ -167,6 +195,7 @@ def load_acwm_phys_split(
         normalize_action=normalize_action,
         action_dims=action_dims,
         action_format=action_format,
+        exclude_by_split=exclude_by_split,
     )
     return ACWMPhysDataset(
         data_path=data_path,
@@ -176,4 +205,5 @@ def load_acwm_phys_split(
         action_dims=action_dims,
         action_format=action_format,
         action_stats=(train.action_mean, train.action_std),
+        exclude_by_split=exclude_by_split,
     )
