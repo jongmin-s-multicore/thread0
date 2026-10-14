@@ -1,6 +1,22 @@
+# DINO-WM vs. ACWM-DiT-S on ACWM-Phys
+
+> Branch `hanbin5/acwm-baseline` compares DINO-WM with ACWM-DiT-S, the baseline model of the ACWM-Phys paper, on four environments: Stack Cube, Push Sand, Cloth Move and Pour Water. Both models get the first frame and the actions and predict the following frames. Both are scored on the same test windows and the same frames.
+
+<img src="assets/acwm_baseline_table1.png" width="900" alt="Table 1: DINO-WM vs. ACWM-DiT-S on the same frames">
+
+<img src="assets/acwm_baseline_table3.png" width="700" alt="Table 3: the same comparison by group">
+
+- ACWM-DiT-S is better on Push Sand (MSE ×10⁻³ 0.55 vs. 1.15 InD, 1.59 vs. 4.02 OoD) and on Stack Cube episodes where the cube ends stacked. DINO-WM is better on Stack Cube episodes where the stack fails (OoD 14.7 vs. 18.4) and on Cloth Move. The released Cloth Move checkpoint of ACWM-DiT-S stopped at 11k training steps. On Pour Water the 95 % intervals of the two models overlap in InD and in OoD.
+- The metrics are those of the ACWM-Phys paper (MSE, masked MSE, SSIM, PSNR). They are computed on window frames 5, 10, ..., 35 (Pour Water 15, ..., 35), the frames a frameskip-5 DINO-WM predicts. The paper averages over all 37 frames of a window.
+- With the official evaluation the released checkpoints reproduce the paper's MSE within 2 % when only the first 50 test episodes are scored, as `scripts/eval_all.sh` does. These 50 are the first entries of `metadata.pt`. For Stack Cube they are all successful stacks, and for Cloth Move OoD they are all smaller cloths. On all test episodes the Stack Cube MSE is 43 % (InD) and 32 % (OoD) higher and the Cloth Move OoD MSE is 2.2 times higher.
+- DINO-WM in these tables is the model of the experiment below (62k–65k optimizer steps). A longer run with the training budget of ACWM-DiT-S (933,334 steps at batch 24) was started and stopped. Plan, budget and checkpoints: [issue #4](https://github.com/jongmin-s-multicore/thread0/issues/4).
+- Code: ACWM-DiT-S evaluation in [repro/acwm_dit/](repro/acwm_dit/README.md). DINO-WM training on cached DINOv2 features in `repro/colab/acwm_long.py`.
+
+---
+
 # DINO-WM on ACWM-Phys physics videos
 
-> Branch `hanbin5/acwm-phys` is one experiment. We train the DINO-WM world model on four physics environments of the ACWM-Phys benchmark: Pour Water (fluid), Cloth Move (cloth), Push Sand (granular material) and Stack Cube (rigid pick-and-stack). We measure how well the model predicts future frames from the first frame and the actions, inside and outside the training distribution.
+> This experiment comes from branch `hanbin5/acwm-phys`, which this branch builds on. We train the DINO-WM world model on four physics environments of the ACWM-Phys benchmark: Pour Water (fluid), Cloth Move (cloth), Push Sand (granular material) and Stack Cube (rigid pick-and-stack). We measure how well the model predicts future frames from the first frame and the actions, inside and outside the training distribution.
 
 <table>
 <tr>
