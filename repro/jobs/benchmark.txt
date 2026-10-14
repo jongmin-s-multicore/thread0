@@ -28,3 +28,7 @@ pq_granular     cmd after=train_granular python $THREAD0/repro/eval/eval_pred_qu
 #     (eval_every=1000; deformable 은 success 가 항상 False 라 조기 종료가 없으므로 결과는 같다)
 rope_mpc        plan after=train_rope     env:CKPT_BASE=$DINO_TRAIN --config-name plan.yaml model_name=train_rope     planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5
 granular_mpc    plan after=train_granular env:CKPT_BASE=$DINO_TRAIN --config-name plan.yaml model_name=train_granular planner=mpc_cem planner.max_iter=5 planner.sub_planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5
+# --- deformable 오픈루프 GD (conf/planner/gd.yaml). 논문 Table 8 의 Rope·Granular GD 칸은 NA 다. 모델·시드·초기/목표 상태는
+#     rope_mpc·granular_mpc 와 같다. GD 중 시뮬 평가는 opt step 0 에서만 (eval_every=1000, 위와 같은 이유)
+rope_gd         plan after=train_rope     env:CKPT_BASE=$DINO_TRAIN --config-name plan.yaml model_name=train_rope     planner=gd planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5
+granular_gd     plan after=train_granular env:CKPT_BASE=$DINO_TRAIN --config-name plan.yaml model_name=train_granular planner=gd planner.eval_every=1000 n_evals=10 goal_source=random_state goal_H=5
