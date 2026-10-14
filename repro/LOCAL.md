@@ -20,7 +20,12 @@
 | 같은 GPU 에 프로세스 4개 | 디코더 각 186 ms (합산 21.5 step/s), predictor 각 16.7 it/s (합산 67 it/s). 한 프로세스가 이미 GPU 를 다 쓴다 |
 | CUDA MPS | 사용자 권한으로 `nvidia-cuda-mps-control -d` 가 뜨지 않았다. 쓰지 않았다 |
 
-동시에 돌려도 합산 속도가 같으므로 큐(`DINO_SLOTS_PER_GPU=3`)는 학습 사이 평가를 겹치는 데만 쓴다. 남은 계산량(디코더 단계 약 168만 step × 50 ms + predictor 단계 약 413만 step × 14 ms)으로 잡은 총 시간은 약 40 시간이다.
+동시에 돌려도 합산 속도가 같으므로 큐(`DINO_SLOTS_PER_GPU=4`)는 학습과 평가를 겹치는 데만 쓴다. 학습 3개를 같이 돌릴 때 각 6.0–6.4 it/s (디코더 포함) 였다.
+
+운영:
+
+- 큐 스케줄러는 `setsid` 로 tmux 와 다른 세션에서 띄우고 tmux 창은 `tail -f $DINO_RUNS/scheduler.log` 만 한다. 스케줄러를 tmux 창 안에서 바로 돌리면 tmux 세션이나 서버가 꺼질 때 SIGHUP 으로 학습 작업이 같이 죽는다 (이번 실행에서 두 번 그렇게 멈췄고, 마지막 state 에서 이어 갔다. 잃은 계산은 각각 약 10분, 30분).
+- torch 2.7 은 `torch.load` 의 기본값이 `weights_only=True` 라 `plan.load_model` 이 train.py 형식 체크포인트(모듈 pickle)를 읽지 못한다. `.claude/env.local.sh` 에 `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` 을 둔다.
 
 # hanbin5/local: 24 GB GPU 2장 환경
 

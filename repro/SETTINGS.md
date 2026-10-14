@@ -252,9 +252,9 @@ SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])�
 - **평가.** `repro/colab/ckpt_tools.py merge` 로 새 가중치를 원래 체크포인트(디코더 포함)에 넣고, `repro/eval/trend_acwm_phys.py` 로 InD·OoD 테스트 에피소드의 전체 롤아웃 마지막 프레임을 §8.3 의 색 마스크로 잰다. 원래 학습의 중간 epoch 체크포인트도 같은 스크립트로 쟀다 (Cloth Move 5·10·15, Push Sand 6·12·18, Stack Cube 5–25): 중반 이후 OoD 값이 움직이지 않는 것은 이어 학습하기 전에도 보였다.
 - 환경마다 한 번 돌렸다.
 
-## 9. 추가 실험: ACWM-Phys baseline (이슈 #4, 8개 환경)
+## 9. 추가 실험: ACWM-Phys baseline (이슈 #4)
 
-ACWM-Phys 논문의 ACWM-DiT-S 와 같은 테스트 창·같은 프레임에서 DINO-WM 을 비교하려고, DINO-WM 을 ACWM-DiT-S 가 본 학습량 이상으로 학습한다. 계획·근거는 이슈 #4 에 있다. 실행 기록과 이 환경의 측정은 브랜치 `211shyn/ACWM-baseline` 의 `repro/LOCAL.md` 0절과 `repro/runs/` 에 있다.
+ACWM-Phys 논문의 ACWM-DiT-S 와 같은 테스트 창·같은 프레임에서 DINO-WM 을 비교하려고, DINO-WM 을 ACWM-DiT-S 가 본 학습량 이상으로 학습한다. 이번 실행은 Cloth Move·Push Sand·Stack Cube·Pour Water 4개 환경만 학습·평가한다. 이슈 #4 의 나머지 4개 환경(Push Cube·Push Rope·Robot Arm·Reacher)은 로더·설정(§9.3)만 만들고 짧은 시험 실행(에피소드 12개, 40 step, 평가 3개)만 했다. 계획·근거는 이슈 #4 에 있다. 실행 기록과 이 환경의 측정은 브랜치 `211shyn/ACWM-baseline` 의 `repro/LOCAL.md` 0절과 `repro/runs/` 에 있다.
 
 ### 9.1 학습량
 
@@ -268,11 +268,12 @@ ACWM-Phys 논문의 ACWM-DiT-S 와 같은 테스트 창·같은 프레임에서 
 | 계산 경로 | 인코더(DINOv2 ViT-S/14)는 동결이라 학습·검증 에피소드의 모든 프레임 토큰을 한 번 계산해 둔다 (float16). 디코더 목표는 dataset transform 을 거친 224 px 프레임을 uint8 로 둔다 (양자화 오차의 MSE 는 약 5e-6, [−1, 1] 기준). 매 step 같은 배치 창 24 개로 predictor 와 디코더를 한 번씩 갱신한다. 디코더 입력은 실제 프레임의 토큰이다 (`train.py` 의 `z.detach()` 와 같다) |
 | 정밀도 | TF32, bf16 autocast (손실은 float32), `torch.compile` |
 | 검증·저장 | 20,000 step 마다 검증 에피소드의 모든 창에서 z_visual_loss 와 그 창 프레임의 재구성 MSE 를 잰다. 가장 낮은 predictor·디코더를 평가에 쓴다. 이어 학습용 state 를 매번 쓴다 |
-| 디코더 상한 | 원래 실행 디코더 step 의 4배 (Cloth Move 247,500, Push Sand 260,064, Stack Cube 248,600, Pour Water 256,680), 새 환경 250,000. 재구성 MSE 가 직전 최저값보다 0.5 % 이상 줄지 않는 평가가 5번(100,000 step) 이어지면 더 일찍 멈춘다 |
-| 시작점 | Cloth Move·Push Sand·Stack Cube·Push Rope 는 이슈 #4 §8 의 Colab 실행이 멈춘 state (HF `hanbin5/dino-wm-acwm-phys` `baseline_x15/`, predictor step 515,000 / 540,128 / 517,200 / 20,000). Pour Water 는 6 epoch 체크포인트 (`train_pw_h1f5`, step 64,170). Push Cube·Robot Arm·Reacher 는 처음부터 |
-| 분할 | `ind_train` 을 0.9 / 0.1 (seed 42) 로 나눈다. 기존 환경과 Push Rope 의 분할은 Colab 실행 로그의 에피소드 번호와 같다 (확인함) |
+| 디코더 상한 | 원래 실행 디코더 step 의 4배 (Cloth Move 247,500, Push Sand 260,064, Stack Cube 248,600, Pour Water 256,680). 재구성 MSE 가 직전 최저값보다 0.5 % 이상 줄지 않는 평가가 5번(100,000 step) 이어지면 더 일찍 멈춘다 |
+| 시작점 | Cloth Move·Push Sand·Stack Cube 는 이슈 #4 §8 의 Colab 실행이 멈춘 state (HF `hanbin5/dino-wm-acwm-phys` `baseline_x15/`, predictor step 515,000 / 540,128 / 517,200). Pour Water 는 6 epoch 체크포인트 (`train_pw_h1f5`, step 64,170) |
+| 분할 | `ind_train` 을 0.9 / 0.1 (seed 42) 로 나눈다. Cloth Move·Push Sand·Stack Cube 의 분할은 Colab 실행 로그의 에피소드 번호와 같다 (확인함) |
+| 이어 받은 값의 확인 | 시작 state 의 검증 z_visual_loss 를 이 경로로 다시 재면 Colab 기록과 같다 (Cloth Move 0.149902 대 0.149903, Push Sand 0.15492, Stack Cube 0.25324). 재구성 MSE 는 3–10 % 낮게 나온다 (0.001095 대 0.001103, 0.000837 대 0.000929, 0.001749 대 0.001807). 검증 프레임을 세는 방식이 다른 것으로 보인다. 디코더 조기 종료의 기준값은 Colab 기록에서 이어 받아 첫 평가 한 번은 이 차이만큼 개선으로 센다 |
 
-### 9.3 새 환경 4개의 데이터 설정
+### 9.3 새 환경 4개의 데이터 설정 (이번 실행에서 학습하지 않았다)
 
 action 이 어느 프레임 전이를 만드는지는 이슈 #4 §5 의 확인(영상의 물체 추적과 회귀, 두 스크립트로 같은 결과)을 따랐다. 이 브랜치에서 다시 확인하지 않았다. 에피소드 수·프레임 수·영상 형식은 이 브랜치에서 metadata 와 영상을 모두 읽어 셌다.
 
