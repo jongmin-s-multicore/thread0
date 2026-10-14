@@ -166,6 +166,27 @@ All benchmark jobs (`repro/jobs/benchmark.txt`) run in a background job queue. T
 bash repro/queue/start.sh
 ```
 
+GPU memory and time. The table gives one planning run on one episode for each row of the results table. It uses `n_evals=1`, which is episode 0 of seed 99, and the other settings of `repro/jobs/benchmark.txt`. "Ours" is the `hanbin5/local` code that produced the results, with the defaults of its `repro/queue/run_plan.sh`. "main" is the code of the `main` branch. It has none of the memory changes of `hanbin5/local`. Peak GPU memory is the largest `nvidia-smi` value of `plan.py` and its environment worker processes. The GPU is an RTX 3090 Ti (24 GB, driver 580.178.04, PyTorch 2.3.0+cu121) that no other job used. The `main` values of `wall_cem30` and `wall_gd` were measured on an RTX 3090. The time is the wall-clock time of `plan.py` with our code, from start to exit. It includes loading the model, setting up the environment and writing the videos. The last column is the time of the full run in the results table (50 episodes, 10 for Rope and Granular). Except for `granular_mpc`, each full run shared its GPU with a second job.
+
+| Run (results table) | Peak GPU memory, ours | Peak GPU memory, main | Time for 1 episode, ours | Episode 0 | Full run, ours |
+|---|---|---|---|---|---|
+| `pointmaze_mpc` | 4.3 GiB | 19.3 GiB | 40 s | success, MPC iteration 1 | 77.0 min |
+| `pointmaze_cem30` | 4.3 GiB | 19.3 GiB | 21 s | success | 2.4 h |
+| `pointmaze_gd` | 1.7 GiB | 2.3 GiB | 18 s | success | 68.1 min |
+| `pusht_mpc` | 4.8 GiB | 19.2 GiB | 62 s | success, MPC iteration 1 | 5.3 h |
+| `pusht_gd` | 1.6 GiB | 2.2 GiB | 72 s | failure | 72.6 min |
+| `wall_mpc` | 3.8 GiB | 6.9 GiB | 44 s | success, MPC iteration 1 | 85.0 min |
+| `wall_cem30` | 3.9 GiB | 6.9 GiB | 22 s | success | 69.8 min |
+| `wall_gd` | 1.3 GiB | 1.5 GiB | 49 s | failure | 35.7 min |
+| `rope_mpc` | 3.9 GiB | 7.0 GiB | 15.6 min | CD 0.219 | 4.2 h |
+| `granular_mpc` | 3.9 GiB | 7.1 GiB | 22.5 min | CD 0.180 | 3.9 h |
+| `rope_gd` | 1.3 GiB | 1.6 GiB | 1.9 min | CD 2.131 | 43.4 min |
+| `granular_gd` | 1.3 GiB | 1.6 GiB | 3.1 min | CD 0.663 | 69.3 min |
+
+The planners stop once the simulator reports success. This is upstream behaviour. Episode 0 succeeded after MPC iteration 1 in PointMaze, PushT and Wall, and the planners stopped there. Rope and Granular have no success test, and MPC runs all 5 iterations. Our code differs from `main` in fp32 SDPA attention and in evaluating the 300 CEM samples in two chunks of 150 (see [Branches and changes to upstream](#branches-and-changes-to-upstream)). Our runner also sets the PyTorch allocator option `expandable_segments`. With `main`, CEM for PointMaze and PushT takes 19.3 GiB. A 24 GB GPU then has 4.7 GiB left for other jobs.
+
+Training Rope and Granular (`num_hist` 1, batch 32, 100 epochs) with our code took about 11.5 GB in `nvidia-smi`. Our code runs validation under `no_grad`. Each training run took about 10.5 h on a GPU shared with a second job.
+
 What was tested. On 2026-10-09 we ran the commands above on the machine above in bash, with an empty home directory, a clean environment (`env -i`) and pip (no uv on `PATH`). Every step succeeded, including `check_env.sh --pyflex` and the quick planning run. The `core` and `deformable` downloads and the job queue were not repeated in that run. For those two downloads we linked our existing data. The `checkpoints` download, which uses the same downloader, was run. In a separate Ubuntu 24.04 container without `/usr/lib/nvidia`, the mujoco-py build failed without `libosmesa6-dev` and succeeded with it. The PointMaze frames rendered in that container differ from the dataset frames by a mean of 0.03 on the 0–255 scale (0.00 with the GPU renderer). Other Linux distributions and other GPUs are untested.
 
 ## Branches and changes to upstream
