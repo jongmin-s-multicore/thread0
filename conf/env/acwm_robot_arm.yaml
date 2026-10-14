@@ -1,0 +1,21 @@
+name: acwm_robot_arm
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/kinematics/robot_arm_64
+  exclude: [episode_1.mp4, episode_104.mp4, episode_106.mp4, episode_114.mp4, episode_115.mp4, episode_127.mp4] # videos shorter (38-61 frames) than their 64 actions
+  action_format: raw # actions[t] is the joint-angle change that takes frame t to t+1
+  action_dims: null # all 7 joints vary
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.acwm_phys_dset.resize_transform" # 480x640 frames, resized without cropping (like Push Sand and the ACWM loader)
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12

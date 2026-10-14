@@ -1,4 +1,5 @@
-"""ACWM-Phys Cloth Move, Push Sand and Stack Cube (HF t1an/ACWM-Phys) as DINO-WM trajectory datasets.
+"""ACWM-Phys Cloth Move, Push Sand, Stack Cube, Push Cube, Push Rope, Robot Arm and Reacher (HF t1an/ACWM-Phys) as DINO-WM
+trajectory datasets.
 
 Layout: <data_path>/{ind_train,ind_test,ood_test}/{*.mp4, metadata.pt}. metadata.pt is a pickled list of dicts
 (video_path, actions [T, A], length, ...); it is loaded with weights_only=True. Videos are decoded lazily like
@@ -11,6 +12,18 @@ map to that differs per environment (action_format):
   pose_next  Push Sand. actions[t] is the pusher pose at frame t (x, 0.9, z, quaternion (0, qy, 0, qw)), so the
              transition t -> t+1 is described by the pose at t+1: action t = (x, z, cos yaw, sin yaw) of actions[t+1].
              The quaternion changes sign within episodes (same orientation), which is why the yaw is given as (cos, sin).
+  next       Push Rope. actions[t] is the pusher position (x, z) at frame t, so action t = actions[t+1] (action_dims).
+  angle_next Reacher. actions[t] are the two joint angles (rad) of the arm in frame t, so action t =
+             (cos q0, cos q1, sin q0, sin q1) of actions[t+1]. q0 is not wrapped (it passes +-pi); the picture only
+             depends on the angles mod 2 pi, hence cos and sin.
+  pair_next  Push Cube. actions[t] is the unit direction of the pusher velocity, and a frame is taken partway through an
+             action period: the move from frame t to t+1 is 0.275 actions[t] + 0.725 actions[t+1] (fitted on the video,
+             the same in all splits). action t = (actions[t], actions[t+1]) gives the model both without the fitted weight.
+  (Robot Arm: raw. actions[t] is the joint-angle change from frame t to t+1.)
+
+exclude: video file names. A plain name applies to ind_train only; "<split>/<name>" applies to that split
+(load_acwm_phys_split passes the list on, so test videos can be left out too).
+Metadata entries whose video file does not exist are dropped (Reacher ind_train lists 40,000 entries for 9,993 videos).
 """
 import torch
 import decord
@@ -38,6 +51,11 @@ def pose_next_actions(actions):
     return torch.stack([nxt[:, 0], nxt[:, 2], torch.cos(yaw), torch.sin(yaw)], dim=1)
 
 
+def angle_next_actions(actions):
+    nxt = actions[1:].float()
+    return torch.cat([torch.cos(nxt), torch.sin(nxt)], dim=1)
+
+
 class ACWMPhysDataset(TrajDataset):
     def __init__(
         self,
@@ -54,16 +72,27 @@ class ACWMPhysDataset(TrajDataset):
         self.split_path = Path(data_path) / split
         self.transform = transform
         meta = torch.load(self.split_path / "metadata.pt", map_location="cpu", weights_only=True)
-        exclude = set(exclude)  # video file names
-        meta = [e for e in meta if Path(e["video_path"]).name not in exclude]
+        n_meta = len(meta)
+        meta = [e for e in meta if (self.split_path / Path(e["video_path"]).name).exists()]
+        if len(meta) < n_meta:
+            print(f"[{split}] {n_meta - len(meta)} of {n_meta} metadata entries have no video file; dropped", flush=True)
+        exclude = set(exclude)  # video file names: plain = ind_train, "<split>/<name>" = that split
+        meta = [e for e in meta if f"{split}/{Path(e['video_path']).name}" not in exclude
+                and not (split == "ind_train" and Path(e["video_path"]).name in exclude)]
         if n_rollout:
             meta = meta[:n_rollout]
         self.video_names = [Path(e["video_path"]).name for e in meta]  # Stack Cube stores absolute paths of the source machine
+        dims = list(action_dims) if action_dims is not None else list(range(meta[0]["actions"].shape[1]))
         if action_format == "pose_next":
             self.actions = [pose_next_actions(e["actions"]) for e in meta]
+        elif action_format == "angle_next":
+            self.actions = [angle_next_actions(e["actions"][:, dims]) for e in meta]
         elif action_format == "raw":
-            dims = list(action_dims) if action_dims is not None else list(range(meta[0]["actions"].shape[1]))
             self.actions = [e["actions"][:, dims].float() for e in meta]
+        elif action_format == "next":
+            self.actions = [e["actions"][1:, dims].float() for e in meta]
+        elif action_format == "pair_next":
+            self.actions = [torch.cat([e["actions"][:-1, dims], e["actions"][1:, dims]], dim=1).float() for e in meta]
         else:
             raise ValueError(f"unknown action_format {action_format}")
         self.seq_lengths = torch.tensor([len(a) for a in self.actions])
@@ -171,6 +200,7 @@ def load_acwm_phys_split(
     return ACWMPhysDataset(
         data_path=data_path,
         split=split,
+        exclude=exclude,  # only "<split>/<name>" entries act on a test split
         transform=transform,
         normalize_action=normalize_action,
         action_dims=action_dims,

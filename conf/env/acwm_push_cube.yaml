@@ -1,0 +1,21 @@
+name: acwm_push_cube
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/rigid_dynamics/push_block
+  exclude: []
+  action_format: pair_next # action t = (actions[t], actions[t+1]): both directions act on the move from frame t to t+1
+  action_dims: null
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform" # 1024x1024 frames: a plain resize
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12

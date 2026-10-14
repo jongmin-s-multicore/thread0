@@ -1,0 +1,21 @@
+name: acwm_push_rope
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/deformable/push_rope
+  exclude: []
+  action_format: next # actions[t] is the pusher position (x, z) in frame t, so action t = actions[t+1]
+  action_dims: null
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform" # 512x512 frames: a plain resize
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12
