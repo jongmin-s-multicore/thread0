@@ -14,10 +14,19 @@
 이면 파일 이름이 smaller_*, larger_* 인 에피소드 중 번호가 짝수인 것을 학습에 넣고 나머지는 검증 세트 ood_smaller, ood_larger 로 따로 잰다
 (규칙: all, none, even, odd). --from_scratch 는 불러온 가중치를 쓰지 않고 epoch 0 부터 새로 학습한다 (설정·분할·action 통계만 slim 에서 가져온다).
 
+데이터는 slim 설정의 env.dataset (hydra target) 그대로 만든다: Cloth Move·Push Sand·Stack Cube 와 새 환경은 acwm_phys_dset,
+Pour Water 는 acwm_pour_water_dset. data_path 에서 "acwm_phys/" 뒤의 부분만 남기고 <ACWM-Phys root> 아래로 옮긴다.
+
+이어 학습: --init <가중치.pt> 는 이 파일(이 스크립트가 낸 <model>_ep<N>.pt)의 predictor·action·proprio 가중치와 epoch 에서
+시작한다 (그 파일에 옵티마이저 상태는 없어서 AdamW 는 새로 시작한다). --state_every N 은 N epoch 마다 옵티마이저까지 담은
+<out>/<name>_state.pt 를 쓰고, --resume 은 그 파일이 있으면 거기서 이어 간다 (세션이 끊긴 뒤). 검증할 때마다 검증 손실이
+가장 낮은 가중치를 <out>/<name>_best.pt 로 둔다.
+
 usage (cwd = repo root):
   python repro/colab/predictor_long.py <slim.pt> <ACWM-Phys root> <out dir> --epochs 30,60,120,240
          [--device cuda] [--max_episodes 0] [--batch_size 0] [--seed 0] [--tf32] [--amp] [--compile]
          [--extra_split ood_test --extra_train smaller:even,larger:even] [--from_scratch] [--eval_only] [--tag NAME] [--tokens_cpu]
+         [--init weights.pt] [--state_every 5] [--resume] [--val_every 5]
 """
 import os, sys, json, time, argparse, itertools
 import torch
@@ -57,13 +66,13 @@ class Frames(torch.utils.data.Dataset):
 
     def __getitem__(self, k):
         d, i = self.eps[k]
-        return k, d.get_frames(i, range(d.n_obs[i]))[0]["visual"]
+        return k, d.get_frames(i, range(n_obs_of(d, i)))[0]["visual"]
 
 
 @torch.no_grad()
 def encode_all(eps, encoder, resize, dev, workers, tdev):
     """-> tokens (n_frames_total, patches, dim) float16 on tdev, first-frame offset of every episode"""
-    n_obs = [d.n_obs[i] for d, i in eps]
+    n_obs = [n_obs_of(d, i) for d, i in eps]
     offs = torch.tensor([0] + list(itertools.accumulate(n_obs))[:-1])
     probe = encoder(resize(torch.zeros(1, 3, 224, 224, device=dev)))
     tok = torch.empty(sum(n_obs), probe.shape[1], probe.shape[2], dtype=torch.float16, device=tdev)
@@ -104,6 +113,21 @@ def pick(names, rules):
     return train, held
 
 
+def remap(path, data_root):
+    """<anything>/acwm_phys/<env folder> -> <data_root>/<env folder>"""
+    tail = str(path).split("acwm_phys/", 1)[-1]
+    return os.path.join(data_root, tail)
+
+
+def n_obs_of(d, i):
+    return d.n_obs[i] if hasattr(d, "n_obs") else int(d.seq_lengths[i])  # Pour Water: frames = actions
+
+
+def save_atomic(obj, path):
+    torch.save(obj, path + ".tmp")
+    os.replace(path + ".tmp", path)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("slim"); ap.add_argument("data_root"); ap.add_argument("out")
@@ -122,12 +146,17 @@ def main():
     ap.add_argument("--eval_only", action="store_true", help="only measure the loaded weights on the validation sets (the training set is not encoded)")
     ap.add_argument("--tag", default="")
     ap.add_argument("--tokens_cpu", action="store_true", help="keep the cached tokens in RAM instead of on the GPU (when the GPU is shared; a little slower)")
+    ap.add_argument("--init", default="", help="start from these weights (<model>_ep<N>.pt of an earlier run) instead of the slim's")
+    ap.add_argument("--state_every", type=int, default=5, help="write <name>_state.pt (weights + optimizers) every N epochs")
+    ap.add_argument("--resume", action="store_true", help="continue from <out>/<name>_state.pt if it exists")
+    ap.add_argument("--val_every", type=int, default=5)
     args = ap.parse_args()
     dev = args.device
     S = torch.load(args.slim, map_location="cpu")
     cfg = OmegaConf.create(S["cfg"])
     name, env, H, P, f = S["model_name"] + (f"_{args.tag}" if args.tag else ""), cfg.env.name, cfg.num_hist, cfg.num_pred, cfg.frameskip
-    start_epoch = 0 if args.from_scratch else S["epoch"]
+    init = torch.load(args.init, map_location="cpu") if args.init else None
+    start_epoch = 0 if args.from_scratch else (int(init["epoch"]) if init else S["epoch"])
     B = args.batch_size or cfg.training.batch_size
     milestones = sorted(int(e) for e in args.epochs.split(","))
     os.makedirs(args.out, exist_ok=True)
@@ -138,16 +167,15 @@ def main():
     amp = lambda: torch.autocast("cuda", dtype=torch.bfloat16, enabled=args.amp and dev.startswith("cuda"))
     tdev = "cpu" if args.tokens_cpu else dev  # where the cached tokens and their slice indices live
 
-    # ---- data: same episodes, split and action normalization as the original run
-    ds = cfg.env.dataset
-    dset = ACWMPhysDataset(os.path.join(args.data_root, SUBDIR[env]), "ind_train", n_rollout=ds.n_rollout, exclude=list(ds.exclude),
-                           transform=hydra.utils.instantiate(ds.transform), normalize_action=cfg.normalize_action,
-                           action_dims=None if ds.action_dims is None else list(ds.action_dims), action_format=ds.action_format)
+    # ---- data: same episodes, split and action normalization as the original run (the env's own dataset target)
+    ds = OmegaConf.create(OmegaConf.to_container(cfg.env.dataset))
+    ds.data_path = remap(ds.data_path, args.data_root)
+    _, trajs = hydra.utils.call(ds, num_hist=H, num_pred=P, frameskip=f)
+    dset = trajs["train"].dataset
     assert torch.allclose(dset.action_mean, S["action_mean"]) and torch.allclose(dset.action_std, S["action_std"]), "action statistics differ"
     by_name = {n: i for i, n in enumerate(dset.video_names)}
     tr_idx, va_idx = [by_name[n] for n in S["train_names"]], [by_name[n] for n in S["val_names"]]
-    tr_split, _ = split_traj_datasets(dset, train_fraction=ds.split_ratio, random_seed=42)
-    print("split identical to torch's own on this machine:", list(tr_split.indices) == tr_idx, flush=True)
+    print("split identical to torch's own on this machine:", list(trajs["train"].indices) == tr_idx, flush=True)
     if args.max_episodes:
         tr_idx, va_idx = tr_idx[: args.max_episodes], va_idx[: max(args.max_episodes // 4, 2)]
     sets = {"train": [(dset, i) for i in tr_idx], "valid": [(dset, i) for i in va_idx]}
@@ -201,8 +229,9 @@ def main():
     n_patches = (cfg.img_size // 16) ** 2
     predictor = hydra.utils.instantiate(cfg.predictor, num_patches=n_patches, num_frames=H,
                                         dim=emb_dim + (cfg.proprio_emb_dim * cfg.num_proprio_repeat + cfg.action_emb_dim * cfg.num_action_repeat) * cfg.concat_dim)
+    W = init if init else S
     if not args.from_scratch:
-        predictor.load_state_dict(S["predictor"]); action_encoder.load_state_dict(S["action_encoder"]); proprio_encoder.load_state_dict(S["proprio_encoder"])
+        predictor.load_state_dict(W["predictor"]); action_encoder.load_state_dict(W["action_encoder"]); proprio_encoder.load_state_dict(W["proprio_encoder"])
     model = VWorldModel(image_size=cfg.img_size, num_hist=H, num_pred=P, encoder=CachedTokens(emb_dim, patch_size), proprio_encoder=proprio_encoder,
                         action_encoder=action_encoder, decoder=None, predictor=predictor, proprio_dim=cfg.proprio_emb_dim, action_dim=cfg.action_emb_dim,
                         concat_dim=cfg.concat_dim, num_action_repeat=cfg.num_action_repeat, num_proprio_repeat=cfg.num_proprio_repeat,
@@ -210,8 +239,8 @@ def main():
     if args.compile:
         model.predictor = torch.compile(predictor)  # shares the parameters; state dicts are taken from `predictor`
     opt_p = torch.optim.AdamW(predictor.parameters(), lr=cfg.training.predictor_lr)
-    if not args.from_scratch:
-        opt_p.load_state_dict(S["predictor_optimizer"])
+    if not args.from_scratch and not init and S.get("predictor_optimizer") is not None:
+        opt_p.load_state_dict(S["predictor_optimizer"])  # with --init the optimizer starts fresh (weights files have no optimizer state)
     opt_a = torch.optim.AdamW(itertools.chain(action_encoder.parameters(), proprio_encoder.parameters()), lr=cfg.training.action_encoder_lr)  # its state is not in the checkpoint
 
     def batch(split, idx):
@@ -246,15 +275,34 @@ def main():
                 rec[f"val_{k}_z_visual_loss"] = evaluate(k)["z_visual_loss"]
         return rec
 
-    emit({"model": name, "epoch": start_epoch, **evaluate_all(), "original_log_val_z_visual_loss": S["val_z_visual_loss"],
-          "note": "random initialization" if args.from_scratch else "loaded weights, before any further training"})
+    state_path = os.path.join(args.out, f"{name}_state.pt")
+    best = {"val": float("inf"), "epoch": None}
+    if args.resume and os.path.exists(state_path):
+        R = torch.load(state_path, map_location="cpu")
+        predictor.load_state_dict(R["predictor"]); action_encoder.load_state_dict(R["action_encoder"]); proprio_encoder.load_state_dict(R["proprio_encoder"])
+        opt_p.load_state_dict(R["opt_p"]); opt_a.load_state_dict(R["opt_a"])
+        torch.set_rng_state(R["rng_cpu"])
+        if dev.startswith("cuda") and R.get("rng_cuda") is not None:
+            torch.cuda.set_rng_state(R["rng_cuda"])
+        start_epoch, best = int(R["epoch"]), R["best"]
+        emit({"model": name, "epoch": start_epoch, "note": f"resumed from {state_path}", "best": best})
+    else:
+        rec0 = evaluate_all()
+        emit({"model": name, "epoch": start_epoch, **rec0, "original_log_val_z_visual_loss": S["val_z_visual_loss"],
+              "note": "random initialization" if args.from_scratch else ("weights from " + args.init if init else "loaded weights, before any further training")})
+        if not args.from_scratch:
+            best = {"val": rec0["val_z_visual_loss"], "epoch": start_epoch}
+
+    def weights(epoch):
+        return {"model_name": name, "epoch": epoch, "predictor": predictor.state_dict(), "action_encoder": action_encoder.state_dict(),
+                "proprio_encoder": proprio_encoder.state_dict()}
 
     if args.eval_only:
         return
     n_tr = len(data["train"][2])
     steps_per_epoch = (n_tr + B - 1) // B
     t0, step = time.time(), 0
-    for epoch in range(start_epoch + 1, milestones[-1] + 1):
+    for epoch in range(start_epoch + 1, milestones[-1] + 1):  # start_epoch is the resumed epoch after --resume
         model.train()
         perm = torch.randperm(n_tr, device=tdev)
         run = 0.0
@@ -268,12 +316,18 @@ def main():
             step += 1
         rec = {"model": name, "epoch": epoch, "steps_total": epoch * steps_per_epoch, "train_z_visual_loss_sampled": run / ((steps_per_epoch + 49) // 50),
                "it_per_s": step / (time.time() - t0), "minutes": (time.time() - t0) / 60}
-        if epoch in milestones or epoch % 5 == 0:
+        if epoch in milestones or epoch % args.val_every == 0:
             rec.update(evaluate_all())
+            if rec["val_z_visual_loss"] < best["val"]:
+                best = {"val": rec["val_z_visual_loss"], "epoch": epoch}
+                save_atomic(weights(epoch), os.path.join(args.out, f"{name}_best.pt"))
+            rec["best_epoch"], rec["best_val_z_visual_loss"] = best["epoch"], best["val"]
         emit(rec)
         if epoch in milestones:
-            torch.save({"model_name": name, "epoch": epoch, "predictor": predictor.state_dict(), "action_encoder": action_encoder.state_dict(),
-                        "proprio_encoder": proprio_encoder.state_dict()}, os.path.join(args.out, f"{name}_ep{epoch}.pt"))
+            save_atomic(weights(epoch), os.path.join(args.out, f"{name}_ep{epoch}.pt"))
+        if epoch % args.state_every == 0 or epoch == milestones[-1]:
+            save_atomic({**weights(epoch), "opt_p": opt_p.state_dict(), "opt_a": opt_a.state_dict(), "rng_cpu": torch.get_rng_state(),
+                         "rng_cuda": torch.cuda.get_rng_state() if dev.startswith("cuda") else None, "best": best}, state_path)
     print("done", flush=True)
 
 
