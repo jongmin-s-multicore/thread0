@@ -8,6 +8,7 @@ These scripts evaluate the released ACWM-DiT-S checkpoints (Hugging Face `t1an/A
 | `analyze.py` | Turns the jsonl and the saved frames into `<env>_summary.json`: the official numbers (all episodes and the first 50), per-episode means with 95 % bootstrap intervals, and the metric of our DINO-WM evaluation on the frames a frameskip-5 model predicts (window frames 5, 10, ..., 35; Pour Water 15, ..., 35). |
 | `rollout_chain.py` | Whole-episode rollout by chaining 37-frame windows. Each window starts from the last predicted frame of the previous one. |
 | `amount.py` | Water, cloth and sand pixels and the stacked-cube rule on those rollouts, with the colour masks of `repro/eval/eval_acwm_phys_quant.py` at 224 px. |
+| `compare.py`, `paper_table.py`, `render_tables.py` | Tables of the comparison: ACWM-DiT-S against the paper, and DINO-WM against ACWM-DiT-S on the same frames. They read `<env>_summary.json` and `<env>_amount.json` from `$DINO_WORK/results/acwm_dit_baseline/summary/` and the DINO-WM result files under `$DINO_WORK/results/`, and write `compare.md`, `paper_table.md`, `paper_table.tex` and `figs/table{1,2,3,4}.png` next to `summary/`. `render_tables.py` needs tectonic and pdftoppm. |
 
 ## Setup
 
