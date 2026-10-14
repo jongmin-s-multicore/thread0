@@ -2,13 +2,13 @@
 
 This repository is a fork of [gaoyuezhou/dino_wm](https://github.com/gaoyuezhou/dino_wm), the code of DINO-WM ([arXiv:2411.04983](https://arxiv.org/abs/2411.04983), "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning"). We re-ran the paper's planning benchmarks with the released code. For PointMaze, PushT and Wall we used the authors' released world models. For Rope and Granular we trained the world models ourselves, because no checkpoints were released.
 
-- Evaluation videos: [Google Drive folder `dino-wm-videos`](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). It has one sub-folder per experiment. The experiments are listed below.
+- Evaluation videos: [Google Drive folder `dino-wm-videos`](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). It has four group folders. [`[benchmark]`](https://drive.google.com/drive/folders/1qzPCzAmGGkH3RAtbHiuM1o4GWQTlGXI0) has one sub-folder for each benchmark run listed below. [`[acwm]`](https://drive.google.com/drive/folders/1bxrZo-VIF8ZnbS82kWPGukI-ctp-J4pi) has the ACWM-Phys experiments (branch `hanbin5/acwm-phys`). [`[camera]`](https://drive.google.com/drive/folders/1uAP6EGJESlsj-xNHfOTAo8-o6RLNh0WD) has the moving-camera experiment (branch `hanbin5/occlusion`). [`[data]`](https://drive.google.com/drive/folders/1pAgVNvCbZLKMLwGSiK3Tiukncd1LIiTg) has 10 sample episodes of each training dataset.
 - Detailed results and discussion (Korean): issues [#1](https://github.com/jongmin-s-multicore/thread0/issues/1) (PointMaze, PushT, Wall) and [#2](https://github.com/jongmin-s-multicore/thread0/issues/2) (Rope, Granular). Full numbers for the main results table are in the JSON comments of those issues. The additional runs reported below are PointMaze seeds 1 and 101, the original-code-path re-run, the Rope predictor-lr 5e-5 retrain, the Rope/Granular arm-video re-runs and the Rope/Granular open-loop GD runs (`rope_gd`, `granular_gd`). They are not in the issues yet. Their run records are on the `hanbin5/local` branch (`repro/runs/`).
 - Protocol (Korean): [repro/SETTINGS.md](repro/SETTINGS.md). It covers models, data, hyper-parameters, evaluation and differences from upstream. How to run (Korean): [repro/README.md](repro/README.md).
 
 ## Results
 
-Each row is one sub-folder of the [video folder](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). The planning seed is 99 in every row. Paper numbers are from arXiv v2. MPC numbers are from Table 1. Open-loop CEM and GD numbers are from Table 8.
+Each row is one sub-folder of [`[benchmark]`](https://drive.google.com/drive/folders/1qzPCzAmGGkH3RAtbHiuM1o4GWQTlGXI0) in the [video folder](https://drive.google.com/drive/folders/17M0MZGSDPzu7CCT3ez3ABMyZGjavTfx3). The planning seed is 99 in every row. Paper numbers are from arXiv v2. MPC numbers are from Table 1. Open-loop CEM and GD numbers are from Table 8.
 
 | Experiment (video folder) | Environment | World model | Planner | Metric | Ours | Paper |
 |---|---|---|---|---|---|---|
