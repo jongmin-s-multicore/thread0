@@ -114,6 +114,8 @@ Settings of the four models and GPU memory at batch 32:
 | `move-blind-h2` | `env.dataset.variant=move num_hist=2 has_decoder=False model.train_decoder=False` | about 9 GB |
 | `move-told-h1` | `env.dataset.variant=move env.dataset.cam_action=true num_hist=1` (with decoder) | about 12 GB |
 
+The trained models are on Hugging Face in [`hanbin5/dino-wm-camera`](https://huggingface.co/hanbin5/dino-wm-camera) (checkpoints every 10 epochs, `outputs/<model>/checkpoints/model_50.pth` is the one evaluated). `huggingface-cli download hanbin5/dino-wm-camera --local-dir $DINO_TRAIN` puts them where the commands below look for them. The rendered training sets are in the dataset [`hanbin5/dino-wm-deformable-cam`](https://huggingface.co/datasets/hanbin5/dino-wm-deformable-cam). The `fixed` model `train_rope@50` is the 50-epoch checkpoint of the Rope model of the benchmark reproduction and is not uploaded.
+
 Evaluate and make the videos. Evaluation of five models uses about 4 GB of GPU memory.
 
 ```bash
