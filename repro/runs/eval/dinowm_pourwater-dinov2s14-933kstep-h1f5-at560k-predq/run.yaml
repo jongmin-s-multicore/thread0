@@ -1,0 +1,22 @@
+# 이 실행이 무엇이었는지의 기록 (손으로 썼다). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_pourwater-dinov2s14-933kstep-h1f5-at560k-predq
+kind: eval
+stack: dinowm
+job: eval_pw
+date: 2026-10-15
+env: acwm_pour_water
+model:
+  ckpt: '$DINO_TRAIN/outputs/acwm_base_pw/checkpoints/model_latest.pth (ckpt_tools.py build: 검증 z_visual_loss 최저 predictor step 560k, 검증 재구성 MSE 최저 디코더)'
+  num_hist: 1
+  frameskip: 5
+protocol:
+  sets: 'ind_test 50, ood_test 50 (첫 프레임 물 양 낮음 / 높음)'
+  acwm: >-
+    eval_pour_water.py 의 ACWM 방식 지표: 37프레임 창, 에피소드마다 시작 10곳, 프레임 5·10·…·35 (표는 15·…·35), ACWM data_config 의 obs_shape, [0, 1], MSE·M-MSE·PSNR·SSIM 과 정적 기준선 (copy_first, time_mean)
+  other: '한 스텝, 전체 에피소드 롤아웃, action 민감도 (SETTINGS.md §7.3, §8.3)'
+  quantities: 'eval_pour_water_volume.py: 화면 전체와 상자 바닥의 물 색 픽셀 수 곡선'
+  intervals: '에피소드 단위 bootstrap 95 %'
+command: >-
+  bash repro/queue/run_cmd.sh eval_pw <gpu> (repro/jobs/acwm_baseline.txt 의 eval_pw 줄)
+output: '$DINO_WORK/results/acwm_baseline/pw*'
+code: '브랜치 211shyn/ACWM-baseline 075cb25'

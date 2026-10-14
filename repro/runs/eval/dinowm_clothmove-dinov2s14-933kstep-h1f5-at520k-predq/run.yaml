@@ -1,0 +1,22 @@
+# 이 실행이 무엇이었는지의 기록 (손으로 썼다). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_clothmove-dinov2s14-933kstep-h1f5-at520k-predq
+kind: eval
+stack: dinowm
+job: eval_cloth
+date: 2026-10-15
+env: acwm_cloth_move
+model:
+  ckpt: '$DINO_TRAIN/outputs/acwm_base_cloth/checkpoints/model_latest.pth (ckpt_tools.py build: 검증 z_visual_loss 최저 predictor step 520k, 검증 재구성 MSE 최저 디코더)'
+  num_hist: 1
+  frameskip: 5
+protocol:
+  sets: 'ind_test 100, ood_test 100 (파일 이름으로 smaller 50 / larger 50). 세트마다 first50 (metadata 순서 앞 50개)'
+  acwm: >-
+    eval_acwm_phys.py 의 ACWM 방식 지표: 37프레임 창, 에피소드마다 시작 10곳, 프레임 5·10·…·35, ACWM data_config 의 obs_shape, [0, 1], MSE·M-MSE·PSNR·SSIM 과 정적 기준선 (copy_first, time_mean)
+  other: '한 스텝, 전체 에피소드 롤아웃, action 민감도 (SETTINGS.md §7.3, §8.3)'
+  quantities: 'eval_acwm_phys_quant.py: 천(주황 + 분홍 뒷면) 픽셀 수·IoU·중심, 그리퍼 공 두 개의 중심'
+  intervals: '에피소드 단위 bootstrap 95 %'
+command: >-
+  bash repro/queue/run_cmd.sh eval_cloth <gpu> (repro/jobs/acwm_baseline.txt 의 eval_cloth 줄)
+output: '$DINO_WORK/results/acwm_baseline/cloth*'
+code: '브랜치 211shyn/ACWM-baseline 075cb25'

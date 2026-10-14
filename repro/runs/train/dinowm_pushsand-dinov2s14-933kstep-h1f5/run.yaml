@@ -1,0 +1,35 @@
+# 이 실행이 무엇이었는지의 기록 (손으로 썼다). 결과 수치는 넣지 않는다 — 이슈로 올린다.
+id: dinowm_pushsand-dinov2s14-933kstep-h1f5
+kind: train
+stack: dinowm
+job: base_sand
+date: 2026-10-14
+env: acwm_push_sand
+dataset: >-
+  $DATASET_DIR/acwm_phys/particle/push_sand (HF t1an/ACWM-Phys 4017e5f). ind_train 1784개를 무작위 0.9/0.1 seed 42 로 나눠 학습 1605 / 검증 179 에피소드, 에피소드마다 64프레임. action 은 다음 프레임의 밀판 자세 (x, z, cos yaw, sin yaw) 4차원 (action_format pose_next), 304×512 프레임을 자르지 않고 224×224 로 줄인다
+model:
+  encoder: 'DINOv2 ViT-S/14 patch tokens, 동결 (hub 85a2460). 학습·검증 프레임의 토큰을 한 번 계산해 float16 으로 캐시'
+  predictor: 'ViT depth 6, heads 16, mlp 2048, dropout 0.1'
+  decoder: 'VQ-VAE decoder (quantize False). 같은 배치 창의 실제 프레임 토큰을 재구성 (train.py 의 z.detach() 와 같다). 목표 프레임은 transform 뒤 224 px 를 uint8 로 캐시'
+  num_hist: 1
+  num_pred: 1
+  frameskip: 5
+  img_size: 224
+training:
+  script: repro/colab/acwm_long.py
+  start: >-
+    HF hanbin5/dino-wm-acwm-phys baseline_x15/train_sand_h1f5/train_sand_h1f5_state.pt (predictor step 540,128 = 144 epoch, 디코더 step 85,016)
+  predictor_steps: '933,334 까지 (이전 학습 포함). 배치 24 × 933,334 = 2,240만 예측 프레임 (이슈 #4 §3, SETTINGS.md §9.1)'
+  decoder_steps: >-
+    상한 260,064 (원래 디코더 65,016 step × 4). 검증 재구성 MSE 가 직전 최저값보다 0.5 % 이상 줄지 않는 평가가 5번 이어지면 먼저 멈춘다
+  batch_size: 24
+  optimizer: 'predictor AdamW lr 5e-5, action·proprio encoder AdamW lr 5e-4, decoder Adam lr 3e-4'
+  precision: 'TF32, bf16 autocast (손실은 float32), torch.compile'
+  validation: '20,000 step 마다 검증 에피소드의 모든 창: z_visual_loss, 재구성 MSE. 가장 낮은 predictor·디코더를 평가에 쓴다'
+  seed: 0
+command: >-
+  bash repro/queue/run_cmd.sh base_sand <gpu> (repro/jobs/acwm_baseline.txt 의 base_sand 줄)
+output: >-
+  $ACWM_BASE/train_sand_h1f5/ (train_sand_h1f5_state.pt, train_sand_h1f5_pred_best.pt, train_sand_h1f5_dec_best.pt, train_sand_h1f5.jsonl)
+code: >-
+  브랜치 211shyn/ACWM-baseline. 학습은 4118de7 에서 시작해 두 번 멈췄다가 (tmux 종료, LOCAL.md §0) 마지막 state 에서 23a7ed7, 075cb25 (Cloth Move 는 d4165c4) 로 이어 갔다. 이 커밋들 사이에 repro/colab/acwm_long.py 와 모델 코드는 같고, datasets/acwm_phys_dset.py 의 차이(match_video_length, 기본 꺼짐)는 이 환경에 영향이 없다. 코드: upstream gaoyuezhou/dino_wm 0a9492f + main 공용 수정 + hanbin5/local·hanbin5/acwm-phys 수정 + 이 브랜치
