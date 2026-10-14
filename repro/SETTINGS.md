@@ -240,3 +240,14 @@ SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])�
 그림은 `repro/eval/plot_acwm_phys.py` (면적 곡선), 영상은 `repro/eval/render_acwm_phys.py` (그룹별 세 에피소드 묶음, `--per_episode N` 으로 에피소드별 영상)로 만든다. 두 스크립트는 모델을 다시 실행하지 않고 저장한 프레임만 읽는다.
 
 한계는 다음과 같다. 시드 하나·설정 하나로 실행했다. 검증 잠재 손실이 마지막 epoch 에도 epoch 당 0.4–0.8 % 씩 내려가고 있었다. 논문의 ACWM-DiT 수치와는 프레임 부분집합(frameskip 5)·split 크기·모델이 달라 수치를 비교하지 않는다.
+
+### 8.4 더 오래 학습 (predictor 만 이어서)
+
+"더 학습하면 OoD 문제가 풀리는가"를 보려고 세 모델을 원래 optimizer step 의 2·4·8배까지 이어 학습했다 (`repro/colab/predictor_long.py`). 결과는 루트 `README.md` 의 "More training" 절에 있다.
+
+- **무엇을 학습하나.** 인코더는 동결이고 디코더는 정답 프레임의 잠재만 재구성하므로 predictor 와 상관없다. 그래서 학습·검증 에피소드의 모든 프레임을 한 번 인코딩해 패치 토큰(float16)을 GPU 에 올려 두고, `train.py` 와 같은 `VWorldModel`(디코더 없이)·같은 손실·같은 옵티마이저 설정(AdamW, predictor lr 5e-5, action·proprio encoder lr 5e-4)·같은 배치 24 로 predictor 와 action·proprio encoder 만 이어 학습한다. 디코더는 원래 것을 그대로 쓴다. predictor 옵티마이저 상태는 체크포인트에서 이어 받고, action encoder 옵티마이저 상태는 체크포인트에 없어서 새로 시작한다.
+- **같은 경로인지.** 불러온 가중치의 검증 손실을 이 경로로 다시 재면 원래 학습 로그와 같다: Cloth Move 0.16642 대 0.16638, Push Sand 0.1716 대 0.1717.
+- **목표 epoch.** Cloth Move 15 → 30 / 60 / 120, Push Sand 18 → 36 / 72 / 144, Stack Cube 25 → 50 / 100 / 200. epoch 은 원래와 같이 학습 슬라이스 전부 한 번이다.
+- **속도·정밀도.** RTX PRO 6000 (Blackwell, 96 GB, Colab `G4`) 에서 배치 24 로 fp32 46 it/s, TF32 67 it/s, TF32 + bfloat16 autocast 81 it/s 였고 본 실행은 TF32 + bfloat16 로 했다 (검증 손실 차이 0.0005). 세 환경을 한 GPU 에서 CUDA MPS 로 같이 돌려 각 31–36 it/s, 8배까지 3시간 55분 걸렸다. 토큰은 GPU 메모리를 Cloth Move 18 GB, Push Sand 16 GB, Stack Cube 11 GB 쓴다.
+- **평가.** `repro/colab/ckpt_tools.py merge` 로 새 가중치를 원래 체크포인트(디코더 포함)에 넣고, `repro/eval/trend_acwm_phys.py` 로 InD·OoD 테스트 에피소드의 전체 롤아웃 마지막 프레임을 §8.3 의 색 마스크로 잰다. 원래 학습의 중간 epoch 체크포인트도 같은 스크립트로 쟀다 (Cloth Move 5·10·15, Push Sand 6·12·18, Stack Cube 5–25): 중반 이후 OoD 값이 움직이지 않는 것은 이어 학습하기 전에도 보였다.
+- 환경마다 한 번 돌렸다.

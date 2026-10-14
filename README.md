@@ -17,6 +17,7 @@ In every clip the left half is the real video and the right half is the model. T
 
 - Videos, real next to model: [Pour Water](https://drive.google.com/drive/folders/1ejhY8cU0dFgsPEEExnReXy0_kTZ1yRkg) · [Cloth Move](https://drive.google.com/drive/folders/1zackVOkDErFJBOC7ylLhR44QV_rfAZkC) · [Push Sand](https://drive.google.com/drive/folders/1jPap3D5vxFnut8BHrOugjFDgN9xxZkIy) · [Stack Cube](https://drive.google.com/drive/folders/1r2SIYP-alTeVXvKPwAqPim6WAvd6t6IL) (Google Drive)
 - Results: [summary](#summary) and [tables](#acwm-phys-results) below
+- Follow-up: [does more training fix it?](#more-training) No, not with 8 times the optimizer steps.
 - How to run: [Reproduce the ACWM-Phys experiments](#reproduce-the-acwm-phys-experiments)
 - Settings and data conventions (Korean): [repro/SETTINGS.md](repro/SETTINGS.md) §7 (Pour Water) and §8 (the other three)
 - Prior work on DINO-WM, physics and InD/OoD evaluation (Korean): [repro/PRIOR_WORK.md](repro/PRIOR_WORK.md)
@@ -109,12 +110,48 @@ Limits of these numbers:
 - The colour masks are checked against the decoder on real frames. On InD episodes the masks overlap with IoU 0.92 (cloth) and 0.95 (sand), and the areas agree within 2–3 %. For Push Sand OoD the decoder draws 17 % less sand than the real frame. Part of the gap in that row is due to the decoder.
 - The "stacked" test is an image rule. It tests whether the yellow cube's centre is directly above the green cube. On real frames the rule agrees with the dataset's success flag in 98.8 % of the training episodes. Failed stacks show 8–12 % in the Real column because the rule and the flag do not agree in every episode.
 
+## More training
+
+More training does not fix the out-of-distribution cases. We continued the three num_hist 1 models (Cloth Move, Push Sand, Stack Cube) to 2, 4 and 8 times the original number of optimizer steps. The data, the batch size, the learning rates and the loss are the same as in the original runs. Only the predictor and the action encoder are trained further, because the encoder is frozen and the decoder never sees the predictor: the encoder's features of all frames are computed once and kept on the GPU, and the decoder of the original run is used unchanged.
+
+![Object amount at the last frame against the amount of training: real, model, model on InD episodes](assets/acwm_more_training.png)
+
+<img src="assets/acwm_more_train_cloth_ood_larger.gif" width="640" alt="Cloth Move with a larger cloth: real video, original model, model trained 8 times longer">
+
+The clip is a Cloth Move episode with the larger cloth: the real video, the original model and the model trained 8 times longer. The label gives the cloth pixels of each frame.
+
+| Last frame | Real | Original | 2× steps | 4× steps | 8× steps |
+|---|---|---|---|---|---|
+| Cloth Move, OoD larger cloth: cloth pixels | 4,475 | 1,836 | 1,822 | 2,017 | 1,923 |
+| Cloth Move, OoD smaller cloth: cloth pixels | 404 | 1,129 | 954 | 833 | 859 |
+| Cloth Move, InD test: cloth pixels | 1,819 | 1,888 | 1,852 | 1,759 | 1,742 |
+| Push Sand, OoD 2× particles: sand pixels | 3,886 | 1,843 | 1,828 | 1,892 | 1,872 |
+| Push Sand, InD test: sand pixels | 1,792 | 1,665 | 1,651 | 1,728 | 1,720 |
+| Stack Cube, OoD failed stacks (71): shows the cube stacked | 8 % | 23 % | 18 % | 24 % | 24 % |
+| Stack Cube, OoD successful stacks (200): shows the cube stacked | 100 % | 90 % | 88 % | 94 % | 94 % |
+| Stack Cube, InD failed stacks (17): shows the cube stacked | 12 % | 24 % | 29 % | 29 % | 41 % |
+
+| Validation loss (latent MSE, one step) | Original | 2× steps | 4× steps | 8× steps |
+|---|---|---|---|---|
+| Cloth Move | 0.166 | 0.155 | 0.151 | 0.150 |
+| Push Sand | 0.172 | 0.162 | 0.158 | 0.155 |
+| Stack Cube | 0.329 | 0.295 | 0.271 | 0.257 |
+
+- The larger cloth and the doubled sand pile stay at the training size at every amount of training.
+- The smaller cloth moves a little towards the real size (1,129 to 859 pixels) and is still twice the real size (404).
+- Failed stacks are still shown as stacked about three times as often as they really are. On the 17 failed InD episodes the share rises from 24 % to 41 %.
+- In-distribution prediction keeps improving: the validation loss falls in all three environments, and successful stacks are predicted more often (90 % to 94 %).
+- Cloth Move starts to overfit. At 8 times the steps its training loss is 0.100 and its validation loss stays at 0.150.
+
+Videos (real, original model, 8× model side by side, ten episodes per group) and the numbers are in [`[acwm-more train] cloth_move`](https://drive.google.com/drive/folders/1m5OJtnoPXLohEzEPHtQsI9KnQJL_4P61), [`[acwm-more train] push_sand`](https://drive.google.com/drive/folders/1SLErnd0E6CFM00rarQrZp00Z9DGNzp83) and [`[acwm-more train] stack_cube`](https://drive.google.com/drive/folders/1FrMpiW1B3STGARi19XV-w_q81lfk1j80). There is one run per environment.
+
 ## How to read the ACWM-Phys videos
 
 - The left panel, Real, is the dataset video. The right panel, Model, is the world model's rollout from the first frame and all actions of the episode, decoded to pixels. Both panels show every 5th frame at 3 fps, and the last frame is shown for 2 s. Push Sand is trained on frames squeezed to 224 × 224. The videos stretch them back.
 - `<set>_<group>_<rank>_<episode>.mp4`: one episode. There are ten episodes per group, picked at evenly spaced quantiles of the whole-episode LPIPS. Rank `01` is the best-predicted episode and `10` is the worst. Cloth Move has the groups `ind_test_all`, `ood_test_smaller` and `ood_test_larger`. Push Sand has `ind_test_all` and `ood_test_all`. Stack Cube has `{ind,ood}_test_{success,fail}`.
 - `qual_<set>_<group>.mp4`: three episodes of a group in one video (10 %, 50 % and 90 % quantiles), top to bottom.
 - Pour Water: `qual_{ind_test,ood_low,ood_high}.mp4` show ground truth, model A (num_hist 3) and model B (num_hist 1) side by side for one episode each.
+- `[acwm-more train]` folders: each video has three panels, Real, Original and 8x steps. The label of a panel gives the object pixels of that frame. `overview_<set>_<group>.mp4` stacks three episodes of a group. Rank `01` is the episode where the 8× model's pixel count is closest to the real one.
 
 ## Reproduce the ACWM-Phys experiments
 
@@ -168,6 +205,18 @@ python repro/eval/plot_acwm_phys.py $R $R/figs/fig_area_cloth_sand.png
 python repro/eval/tables_acwm_phys.py $DINO_WORK/results
 python repro/eval/readme_figures_acwm_phys.py $DINO_WORK/results assets
 ```
+
+More training (optional). `predictor_long.py` continues the predictor of a finished run. It keeps the encoder's features of all training and validation frames on the GPU. The features take 18 GB for Cloth Move, 16 GB for Push Sand and 11 GB for Stack Cube, and the model and its activations come on top. On an RTX PRO 6000 it runs 81–87 steps per second with `--tf32 --amp`. `train.py` runs 2.75 steps per second on an RTX 3090. It needs only torch, torchvision, einops, omegaconf, hydra-core and decord, so it also runs outside the pinned env. `--epochs` lists the epochs at which weights are saved. The original Cloth Move run ended at epoch 15, so epochs 30, 60 and 120 are 2, 4 and 8 times the steps. `ckpt_tools.py merge` puts the new weights into a checkpoint that the evaluation scripts read.
+
+```bash
+python repro/colab/ckpt_tools.py slim $DINO_TRAIN train_cloth_h1f5 cloth_slim.pt
+python repro/colab/predictor_long.py cloth_slim.pt $DATASET_DIR/acwm_phys out_long --epochs 30,60,120 --tf32 --amp
+python repro/colab/ckpt_tools.py merge $DINO_TRAIN train_cloth_h1f5 out_long/train_cloth_h1f5_ep120.pt train_cloth_h1f5_long
+python repro/eval/trend_acwm_phys.py $DINO_TRAIN train_cloth_h1f5_long $DINO_WORK/results/acwm_phys/long/cloth_ep120.json --epochs 120
+python repro/eval/render_compare_acwm_phys.py $DINO_TRAIN $DINO_WORK/results/acwm_phys/long/figs/cloth --models "Original=train_cloth_h1f5:15,8x steps=train_cloth_h1f5_long:120"
+```
+
+For Push Sand use `train_sand_h1f5` and epochs 36, 72 and 144. For Stack Cube use `train_stack_h1f5` and epochs 50, 100 and 200. `trend_acwm_phys.py` and `render_compare_acwm_phys.py` also run on a CPU with `--device cpu`. `repro/eval/plot_trend_acwm_phys.py` draws the figure of the section above. How we ran `predictor_long.py` on Google Colab is in [AGENTS.md §6](AGENTS.md).
 
 Output locations and comparison. Models: `$DINO_WORK/train_runs/outputs/<job>/`. Logs: `$DINO_WORK/runs/<job>.log`. Results: `$DINO_WORK/results/acwm_phys/<env>_h1f5.json` and `<env>_h1f5_quant.json` (videos and grids under `figs/`), and `$DINO_WORK/results/pour_water/`. `tables_acwm_phys.py` prints the two tables above from your JSON files. The JSON files of our runs are in the Drive folders. A re-run is not bit-identical because of GPU non-determinism. With one seed per environment we do not know how much the numbers vary between runs.
 
