@@ -22,6 +22,14 @@
 
 동시에 돌려도 합산 속도가 같으므로 큐(`DINO_SLOTS_PER_GPU=4`)는 학습과 평가를 겹치는 데만 쓴다. 학습 3개를 같이 돌릴 때 각 6.0–6.4 it/s (디코더 포함) 였다.
 
+이번 실행의 시간 (GPU 3 한 장, `$ACWM_BASE/*/*.jsonl` 의 `done.hours` 와 `run_info.txt`):
+
+| 작업 | 시간 |
+|---|---|
+| Cloth Move·Push Sand·Stack Cube 학습 (마지막으로 다시 띄운 21:17 부터, 셋이 같이) | 6.0 h · 5.2 h · 6.2 h. 디코더 단계 각 6.0–6.4 it/s, predictor 단계 각 7.5–17 it/s |
+| Pour Water 학습 (step 64,170 → 933,334, 앞 1시간은 위 학습·평가와 같이) | 5.8 h |
+| 평가 (`eval_acwm_phys.py` + 물리량, ind_test·ood_test 전부) | Cloth Move 29 분, Push Sand 31 분, Stack Cube 35 분 (셋이 같이, Pour Water 학습과 GPU 공유). Pour Water (`eval_pour_water.py` + 물 양) 11 분 |
+
 운영:
 
 - 큐 스케줄러는 `setsid` 로 tmux 와 다른 세션에서 띄우고 tmux 창은 `tail -f $DINO_RUNS/scheduler.log` 만 한다. 스케줄러를 tmux 창 안에서 바로 돌리면 tmux 세션이나 서버가 꺼질 때 SIGHUP 으로 학습 작업이 같이 죽는다 (이번 실행에서 두 번 그렇게 멈췄고, 마지막 state 에서 이어 갔다. 잃은 계산은 각각 약 10분, 30분).

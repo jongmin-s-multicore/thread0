@@ -291,3 +291,5 @@ action 이 어느 프레임 전이를 만드는지는 이슈 #4 §5 의 확인(�
 ### 9.4 평가
 
 `repro/eval/eval_acwm_phys.py` (Pour Water 는 `eval_pour_water.py`) 의 "acwm" 블록이 ACWM-DiT-S 와 비교하는 값이다. 37프레임 창, 에피소드마다 시작 10곳 (Reacher 는 에피소드가 37프레임이라 1곳), 프레임 5·10·…·35 (Pour Water 는 15·…·35), ACWM `data_config.py` 의 obs_shape (새 환경은 모두 240×240), 움직임 마스크는 창 프레임 0·5·…·35 로 만든다. 테스트 에피소드는 전부 쓴다. PSNR 은 창별 PSNR 의 평균과 평균 MSE 로 계산한 값(논문 방식)을 둘 다 적는다.
+
+결과(수치·그림·영상)는 이슈 #4 와 Drive `dino-wm-videos/[acwm baseline]/[acwm baseline] <환경>/` (best predictor·디코더, 이어 학습용 state, 학습 기록, 평가 JSON, 정성 비교 영상) 에 둔다. Pour Water 의 ind_test copy_first MSE (18.898e-3) 는 이슈 #4 §6 의 값과 같다. ACWM-DiT-S 와 같은 창·같은 프레임을 쟀다는 확인이다.
