@@ -1,0 +1,22 @@
+name: acwm_robot_arm
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/kinematics/robot_arm_64
+  exclude: []
+  match_video_length: true # drop videos whose frame count differs from metadata length
+  action_format: raw # actions[t]: joint-angle change of frame t -> t+1 (7)
+  action_dims: null
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.acwm_phys_dset.resize_transform" # 480x640 frames, resized without cropping
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12

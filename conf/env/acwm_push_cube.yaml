@@ -1,0 +1,22 @@
+name: acwm_push_cube
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/rigid_dynamics/push_block
+  exclude: []
+  match_video_length: false
+  action_format: pair_next # actions[t]: unit direction of the pusher velocity; frame t -> t+1 moves by 0.275 a[t] + 0.725 a[t+1], so action t = (a[t], a[t+1])
+  action_dims: null
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform" # 1024x1024 frames
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12

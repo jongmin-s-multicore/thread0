@@ -1,0 +1,22 @@
+name: acwm_reacher
+args: []
+kwargs: {}
+
+load_dir: ""
+
+dataset:
+  _target_: "datasets.acwm_phys_dset.load_acwm_phys_slice_train_val"
+  n_rollout: null
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/acwm_phys/kinematics/reacher
+  exclude: []
+  match_video_length: true # drop videos whose frame count differs from metadata length
+  action_format: angle_next # actions[t]: the two joint angles at frame t; action t = (cos, sin) of each angle at t+1
+  action_dims: null
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform" # 240x240 frames
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 12

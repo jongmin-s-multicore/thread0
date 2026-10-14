@@ -150,7 +150,7 @@ def main():
     ds_cfg = cfg.env.dataset
     ds_kw = dict(n_rollout=ds_cfg.n_rollout, exclude=list(ds_cfg.exclude), normalize_action=cfg.normalize_action,
                  action_dims=None if ds_cfg.action_dims is None else list(ds_cfg.action_dims), action_format=ds_cfg.action_format,
-                 exclude_by_split=OmegaConf.to_container(ds_cfg.exclude_by_split) if ds_cfg.get("exclude_by_split") else None)  # [repro]
+                 match_video_length=bool(ds_cfg.get("match_video_length", False)))  # [repro]
     n_cuts = CUTS_ENV.get(env, N_CUTS)
     tf = hydra.utils.instantiate(ds_cfg.transform)
     model = load_model(ck, cfg, cfg.num_action_repeat, dev)

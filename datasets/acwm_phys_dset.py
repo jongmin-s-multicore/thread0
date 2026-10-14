@@ -20,10 +20,12 @@ map to that differs per environment (action_format):
   Robot Arm uses raw: actions[t] is the joint-angle change of frame t -> t+1.
 
 Metadata entries whose video file is missing are skipped (Reacher lists about 30,000 episodes without a video).
-exclude_by_split drops further video file names per split (e.g. Reacher episodes in an older video format).
+match_video_length drops entries whose video has a different number of frames than metadata "length" (Reacher: videos
+in an older format, 480x480 and 50 frames; Robot Arm: 6 training videos shorter than their actions).
 """
 import torch
 import decord
+from concurrent.futures import ThreadPoolExecutor
 from einops import rearrange
 from pathlib import Path
 from typing import Callable, Optional, Sequence
@@ -66,14 +68,18 @@ class ACWMPhysDataset(TrajDataset):
         action_dims: Optional[Sequence[int]] = None,
         action_format: str = "raw",
         action_stats: Optional[tuple] = None,
-        exclude_by_split: Optional[dict] = None,
+        match_video_length: bool = False,
     ):
         self.split_path = Path(data_path) / split
         self.transform = transform
         meta = torch.load(self.split_path / "metadata.pt", map_location="cpu", weights_only=True)
-        # [repro] skip entries without a video file, and the names listed for this split
+        # [repro] skip entries without a video file, and (match_video_length) videos whose frame count differs from "length"
         meta = [e for e in meta if (self.split_path / Path(e["video_path"]).name).exists()]
-        exclude = set(exclude) | set((exclude_by_split or {}).get(split, ()))  # video file names
+        if match_video_length:
+            with ThreadPoolExecutor(16) as ex:
+                n_frames = list(ex.map(lambda e: len(decord.VideoReader(str(self.split_path / Path(e["video_path"]).name), num_threads=1)), meta))
+            meta = [e for e, n in zip(meta, n_frames) if n == int(e["length"])]
+        exclude = set(exclude)  # video file names
         meta = [e for e in meta if Path(e["video_path"]).name not in exclude]
         if n_rollout:
             meta = meta[:n_rollout]
@@ -152,7 +158,7 @@ def load_acwm_phys_slice_train_val(
     num_hist=0,
     num_pred=0,
     frameskip=0,
-    exclude_by_split=None,
+    match_video_length=False,
 ):
     dset = ACWMPhysDataset(
         data_path=data_path,
@@ -163,7 +169,7 @@ def load_acwm_phys_slice_train_val(
         normalize_action=normalize_action,
         action_dims=action_dims,
         action_format=action_format,
-        exclude_by_split=exclude_by_split,
+        match_video_length=match_video_length,
     )
     dset_train, dset_val = split_traj_datasets(dset, train_fraction=split_ratio, random_seed=42)
     num_frames = num_hist + num_pred
@@ -184,7 +190,7 @@ def load_acwm_phys_split(
     normalize_action=False,
     action_dims=None,
     action_format="raw",
-    exclude_by_split=None,
+    match_video_length=False,
 ):
     """A whole split (ind_test / ood_test) with the action statistics of the training data (same n_rollout/exclude as training)."""
     train = ACWMPhysDataset(
@@ -195,7 +201,7 @@ def load_acwm_phys_split(
         normalize_action=normalize_action,
         action_dims=action_dims,
         action_format=action_format,
-        exclude_by_split=exclude_by_split,
+        match_video_length=match_video_length,
     )
     return ACWMPhysDataset(
         data_path=data_path,
@@ -205,5 +211,5 @@ def load_acwm_phys_split(
         action_dims=action_dims,
         action_format=action_format,
         action_stats=(train.action_mean, train.action_std),
-        exclude_by_split=exclude_by_split,
+        match_video_length=match_video_length,
     )
