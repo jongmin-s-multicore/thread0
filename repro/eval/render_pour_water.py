@@ -3,6 +3,8 @@
 
 usage (cwd = $DINO_WM, env sourced):
   python repro/eval/render_pour_water.py <ckpt_base_path> <out_dir> [--model_a train_pw_h3f5] [--model_b train_pw_h1f5] [--epoch 6]
+         [--epoch_a N] [--epoch_b N] [--label_a "A  num_hist 3"] [--label_b "B  num_hist 1"]
+  epoch 0 은 checkpoints/model_latest.pth 를 읽는다.
 """
 import os, sys, argparse, subprocess
 from pathlib import Path
@@ -25,7 +27,7 @@ TIMES = [3, 11, 19, 27, 35, 43, 51, 59]  # rollout step (k) of the grid columns,
 def load(ckpt_base, name, epoch):
     mp = Path(ckpt_base) / "outputs" / name
     cfg = OmegaConf.load(mp / "hydra.yaml")
-    model = load_model(mp / "checkpoints" / f"model_{epoch}.pth", cfg, cfg.num_action_repeat, "cuda")
+    model = load_model(mp / "checkpoints" / (f"model_{epoch}.pth" if epoch else "model_latest.pth"), cfg, cfg.num_action_repeat, "cuda")
     model.eval()
     return cfg, model
 
@@ -44,11 +46,15 @@ def main():
     ap.add_argument("ckpt_base"); ap.add_argument("out_dir")
     ap.add_argument("--model_a", default="train_pw_h3f5"); ap.add_argument("--model_b", default="train_pw_h1f5")
     ap.add_argument("--epoch", type=int, default=6)
+    ap.add_argument("--epoch_a", type=int, default=None); ap.add_argument("--epoch_b", type=int, default=None)
+    ap.add_argument("--label_a", default="A  num_hist 3"); ap.add_argument("--label_b", default="B  num_hist 1")
     args = ap.parse_args()
+    ep_a = args.epoch if args.epoch_a is None else args.epoch_a
+    ep_b = args.epoch if args.epoch_b is None else args.epoch_b
     out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
     torch.set_grad_enabled(False)
 
-    cfg_a, model_a = load(args.ckpt_base, args.model_a, args.epoch)
+    cfg_a, model_a = load(args.ckpt_base, args.model_a, ep_a)
     ds_cfg = cfg_a.env.dataset
     tf = default_transform(cfg_a.img_size)
     seed(cfg_a.training.seed)
@@ -65,7 +71,7 @@ def main():
         ep = E.Episode(d, i, tf)
         gt[g], pa[g] = rollout_frames(model_a, cfg_a, ep)
     del model_a
-    cfg_b, model_b = load(args.ckpt_base, args.model_b, args.epoch)
+    cfg_b, model_b = load(args.ckpt_base, args.model_b, ep_b)
     for g, sp, i, w0, d in picks:
         pb[g] = rollout_frames(model_b, cfg_b, E.Episode(d, i, tf))[1]
 
@@ -73,7 +79,7 @@ def main():
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    rows = [(g, w0, nm, src) for g, sp, i, w0, d in picks for nm, src in (("ground truth", gt[g]), ("A  num_hist 3", pa[g]), ("B  num_hist 1", pb[g]))]
+    rows = [(g, w0, nm, src) for g, sp, i, w0, d in picks for nm, src in (("ground truth", gt[g]), (args.label_a, pa[g]), (args.label_b, pb[g]))]
     fig, axes = plt.subplots(len(rows), len(TIMES), figsize=(len(TIMES) * 1.55 + 1.3, len(rows) * 1.55 + 0.5), gridspec_kw={"wspace": 0.03, "hspace": 0.03})
     for r, (g, w0, nm, src) in enumerate(rows):
         for c, k in enumerate(TIMES):
@@ -96,7 +102,7 @@ def main():
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
         for k in range(gt[g].shape[0]):
             panels = []
-            for lab, src in (("ground truth", gt[g]), ("A  num_hist 3", pa[g]), ("B  num_hist 1", pb[g])):
+            for lab, src in (("ground truth", gt[g]), (args.label_a, pa[g]), (args.label_b, pb[g])):
                 im = cv2.resize(np.ascontiguousarray(src[k]), (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
                 cv2.rectangle(im, (0, 0), (w * 2, 26), (252, 252, 251), -1)
                 cv2.putText(im, f"{lab}   {k * 0.5:4.1f} s", (8, 19), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (11, 11, 11), 1, cv2.LINE_AA)
