@@ -160,7 +160,7 @@ class Trainer:
             ["encoder", "encoder_optimizer"] if self.train_encoder else []
         )
         self._keys_to_save += (
-            ["predictor", "predictor_optimizer"]
+            ["predictor", "predictor_optimizer", "action_encoder_optimizer"]  # [repro] action_encoder_optimizer added
             if self.train_predictor and self.cfg.has_predictor
             else []
         )
@@ -168,6 +168,7 @@ class Trainer:
             ["decoder", "decoder_optimizer"] if self.train_decoder else []
         )
         self._keys_to_save += ["action_encoder", "proprio_encoder"]
+        self._optimizer_states = {}  # [repro] optimizer states read by load_ckpt, loaded by init_optimizers
 
         self.init_models()
         self.init_optimizers()
@@ -181,7 +182,10 @@ class Trainer:
                 os.makedirs("checkpoints")
             ckpt = {}
             for k in self._keys_to_save:
-                if hasattr(self.__dict__[k], "module"):
+                if k.endswith("_optimizer"):
+                    # [repro] the optimizer state_dict. init_optimizers() makes the optimizers again on resume
+                    ckpt[k] = self.__dict__[k].state_dict()
+                elif hasattr(self.__dict__[k], "module"):
                     ckpt[k] = self.accelerator.unwrap_model(self.__dict__[k])
                 else:
                     ckpt[k] = self.__dict__[k]
@@ -198,7 +202,12 @@ class Trainer:
     def load_ckpt(self, filename="model_latest.pth"):
         ckpt = torch.load(filename)
         for k, v in ckpt.items():
-            self.__dict__[k] = v
+            if k.endswith("_optimizer"):
+                # [repro] init_optimizers() loads this state into the new optimizers.
+                # Checkpoints written before this change store the optimizer object. Its state_dict() is used.
+                self._optimizer_states[k] = v if isinstance(v, dict) else v.state_dict()
+            else:
+                self.__dict__[k] = v
         not_in_ckpt = set(self._keys_to_save) - set(ckpt.keys())
         if len(not_in_ckpt):
             log.warning("Keys not found in ckpt: %s", not_in_ckpt)
@@ -218,20 +227,22 @@ class Trainer:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
-        self.proprio_encoder = hydra.utils.instantiate(
-            self.cfg.proprio_encoder,
-            in_chans=self.datasets["train"].proprio_dim,
-            emb_dim=self.cfg.proprio_emb_dim,
-        )
+        if self.proprio_encoder is None:  # [repro] make a new one only if the checkpoint has none
+            self.proprio_encoder = hydra.utils.instantiate(
+                self.cfg.proprio_encoder,
+                in_chans=self.datasets["train"].proprio_dim,
+                emb_dim=self.cfg.proprio_emb_dim,
+            )
         proprio_emb_dim = self.proprio_encoder.emb_dim
         print(f"Proprio encoder type: {type(self.proprio_encoder)}")
         self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
 
-        self.action_encoder = hydra.utils.instantiate(
-            self.cfg.action_encoder,
-            in_chans=self.datasets["train"].action_dim,
-            emb_dim=self.cfg.action_emb_dim,
-        )
+        if self.action_encoder is None:  # [repro] make a new one only if the checkpoint has none
+            self.action_encoder = hydra.utils.instantiate(
+                self.cfg.action_encoder,
+                in_chans=self.datasets["train"].action_dim,
+                emb_dim=self.cfg.action_emb_dim,
+            )
         action_emb_dim = self.action_encoder.emb_dim
         print(f"Action encoder type: {type(self.action_encoder)}")
 
@@ -337,6 +348,17 @@ class Trainer:
                 self.decoder.parameters(), lr=self.cfg.training.decoder_lr
             )
             self.decoder_optimizer = self.accelerator.prepare(self.decoder_optimizer)
+
+        # [repro] on resume, continue from the optimizer states in the checkpoint.
+        # The learning rates stay the ones in the config.
+        for k in self._keys_to_save:
+            if k in self._optimizer_states:
+                optimizer = self.__dict__[k]
+                lrs = [group["lr"] for group in optimizer.param_groups]
+                optimizer.load_state_dict(self._optimizer_states[k])
+                for group, lr in zip(optimizer.param_groups, lrs):
+                    group["lr"] = lr
+                log.info(f"Loaded {k} state from the checkpoint")
 
     def monitor_jobs(self, lock):
         """
