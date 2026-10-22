@@ -18,6 +18,7 @@ In every clip the left half is the real video and the right half is the model. T
 - Videos, real next to model: [Pour Water](https://drive.google.com/drive/folders/1ejhY8cU0dFgsPEEExnReXy0_kTZ1yRkg) · [Cloth Move](https://drive.google.com/drive/folders/1zackVOkDErFJBOC7ylLhR44QV_rfAZkC) · [Push Sand](https://drive.google.com/drive/folders/1jPap3D5vxFnut8BHrOugjFDgN9xxZkIy) · [Stack Cube](https://drive.google.com/drive/folders/1r2SIYP-alTeVXvKPwAqPim6WAvd6t6IL) (Google Drive)
 - Results: [summary](#summary) and [tables](#acwm-phys-results) below
 - Follow-up: [does more training fix it?](#more-training) No, not with 8 times the optimizer steps.
+- Follow-up: [does adding OoD episodes to training help?](#adding-ood-episodes-to-training) It helps for the larger cloth and the doubled sand pile. It does not help for the smaller cloth, the amount of water and the failed stacks.
 - How to run: [Reproduce the ACWM-Phys experiments](#reproduce-the-acwm-phys-experiments)
 - Settings and data conventions (Korean): [repro/SETTINGS.md](repro/SETTINGS.md) §7 (Pour Water) and §8 (the other three)
 - Prior work on DINO-WM, physics and InD/OoD evaluation (Korean): [repro/PRIOR_WORK.md](repro/PRIOR_WORK.md)
@@ -145,6 +146,63 @@ The clip is a Cloth Move episode with the larger cloth: the real video, the orig
 
 Videos (real, original model, 8× model side by side, ten episodes per group) and the numbers are in [`[acwm-more train] cloth_move`](https://drive.google.com/drive/folders/1m5OJtnoPXLohEzEPHtQsI9KnQJL_4P61), [`[acwm-more train] push_sand`](https://drive.google.com/drive/folders/1SLErnd0E6CFM00rarQrZp00Z9DGNzp83) and [`[acwm-more train] stack_cube`](https://drive.google.com/drive/folders/1FrMpiW1B3STGARi19XV-w_q81lfk1j80). There is one run per environment.
 
+## Adding OoD episodes to training
+
+The models above are trained on InD episodes only. In this section part of the OoD test episodes is added to the training set. For each environment we trained a second predictor from scratch, with the settings and the number of epochs of the original run and with the same encoder and decoder. The training set gets 50 of the 100 OoD episodes of Cloth Move (25 per cloth size), 50 of 100 of Push Sand, 26 of 50 of Pour Water (14 with less water, 12 with more) and 136 of 271 of Stack Cube. These are 2.7 %, 3.0 %, 2.9 % and 9.9 % of the training episodes. Every OoD number in this section uses only the OoD episodes that were not added (25 + 25, 50, 12 + 12 and 135 episodes). Both models predict the whole episode from the first real frame and the actions. There is one run per model. The models are in `outputs/train_<env>_h1f5_oodmix` of the Hugging Face repo above, and the settings are in [SETTINGS.md §8.5](repro/SETTINGS.md).
+
+![Object amount in every rollout step: real, model trained on InD only, model trained with OoD episodes](assets/acwm_oodmix_amount.png)
+
+The figure shows the object amount in every rollout step, averaged over each test group. Stack Cube shows the failed episodes. One step is 5 frames. Blue is the real video, orange is the model trained on InD only and purple is the model trained with OoD episodes. The bands are 95 % bootstrap intervals of the group mean.
+
+| Last frame of the rollout | Real | InD only | InD + OoD |
+|---|---:|---:|---:|
+| Cloth Move, OoD larger cloth (25): cloth pixels | 4,723 | 1,645 | 3,524 |
+| Cloth Move, OoD smaller cloth (25): cloth pixels | 365 | 1,189 | 1,223 |
+| Cloth Move, InD test (100): cloth pixels | 1,819 | 1,888 | 2,115 |
+| Push Sand, OoD 2× particles (50): sand pixels | 3,856 | 1,833 | 3,035 |
+| Push Sand, InD test (100): sand pixels | 1,792 | 1,665 | 1,731 |
+| Pour Water, OoD less water (12): water pixels in the box | 1,437 | 2,040 | 2,053 |
+| Pour Water, OoD more water (12): water pixels in the box | 2,386 | 2,083 | 2,068 |
+| Pour Water, InD test (50): water pixels in the box | 1,970 | 2,045 | 1,996 |
+| Stack Cube, OoD failed stacks (35): shows the cube stacked | 3 % | 29 % | 29 % |
+| Stack Cube, InD failed stacks (17): shows the cube stacked | 12 % | 24 % | 53 % |
+
+The first table gives the amount in the last frame of the rollout. For Pour Water it is the mean over the last 5 s. The number in brackets is the number of episodes. The Real column differs from the tables above because only the episodes that were not added to training are used (for the larger cloth 4,723 here and 4,475 above).
+
+| Rollout error, MSE × 10⁻³ | InD only | InD + OoD | Change [95 % interval] | Episodes with the lower error: InD + OoD |
+|---|---:|---:|---|---:|
+| Cloth Move, OoD larger cloth (25) | 19.59 | 9.97 | -49 % [-56, -42] | 25 of 25 |
+| Cloth Move, OoD smaller cloth (25) | 6.95 | 4.21 | -39 % [-48, -31] | 25 of 25 |
+| Cloth Move, InD test (100) | 3.44 | 4.30 | +25 % [+16, +34] | 24 of 100 |
+| Push Sand, OoD 2× particles (50) | 4.75 | 2.44 | -49 % [-51, -46] | 50 of 50 |
+| Push Sand, InD test (100) | 1.23 | 1.05 | -15 % [-19, -11] | 70 of 100 |
+| Pour Water, OoD less water (12) | 6.48 | 11.97 | +85 % [+57, +115] | 1 of 12 |
+| Pour Water, OoD more water (12) | 10.87 | 14.34 | +32 % [+10, +56] | 3 of 12 |
+| Pour Water, InD test (50) | 5.97 | 11.04 | +85 % [+66, +105] | 6 of 50 |
+| Stack Cube, OoD (135) | 12.80 | 11.71 | -8 % [-13, -4] | 80 of 135 |
+| Stack Cube, InD (67) | 11.02 | 11.09 | +1 % [-6, +8] | 33 of 67 |
+
+The second table gives the pixel error over the whole rollout, averaged over the steps and then over the episodes. Change is the difference between the two models in % of the InD-only error. The interval is a bootstrap over episodes with both models on the same episodes. The last column counts the episodes in which the model with OoD episodes has the lower error.
+
+- Larger cloth and doubled sand pile. With OoD episodes in training the rollout stays close to the real amount for longer. The last frame has 3,524 cloth pixels (InD only 1,645, real 4,723) and 3,035 sand pixels (InD only 1,833, real 3,856). The error is 49 % lower in both groups, and it is lower in every episode. Part of the remaining sand gap is due to the decoder, which draws less sand than the real frame in this group.
+- Smaller cloth. The error is 39 % lower, but the last frame still has 1,223 cloth pixels (InD only 1,189, real 365).
+- Along the rollout. In Cloth Move the advantage shrinks. In steps 1–4 the error is 68 % (smaller cloth) and 65 % (larger cloth) lower. In steps 9–12 it is 19 % and 35 % lower. In Push Sand it is 45–53 % lower in each third of the rollout.
+- Pour Water. The amount of water in the box does not follow the real amount in either model. Both end with 2,040–2,083 pixels, and the real values are 1,437 (less water) and 2,386 (more water). The timing changes. We count the water as arrived at the first step with 200 water pixels in the box. With more water it arrives at step 16.7 in the real videos. The InD-only model pours at step 2.2 and the model with OoD episodes at step 15.1. On InD episodes the model with OoD episodes pours 0.6 steps early and the InD-only model 0.3 steps late. The rollout error is higher with OoD episodes in all three groups. In the 37-frame windows of the original evaluation the InD error is almost the same (3.06 and 3.18 × 10⁻³).
+- Stack Cube. In 29 % of the failed OoD episodes the last frame shows a stacked cube, with and without OoD episodes in training (real 3 %). On the 17 failed InD episodes the share rises from 24 % to 53 % (real 12 %). The error on OoD episodes is 8 % lower.
+- InD episodes. The error is 25 % higher in Cloth Move, 85 % higher in Pour Water and 15 % lower in Push Sand. In Stack Cube it does not change (+1 %, interval -6 to +8).
+
+![Retention of the OoD difference along the rollout](assets/acwm_oodmix_retention.png)
+
+Retention r(k) after k steps. It is the difference between the OoD group and the InD episodes in the predicted amount, divided by the same difference in the decoder output for the real frames. The value 1 means that the rollout keeps the whole OoD difference, and 0 means that the OoD group looks like InD. After 12 steps r is 0.51 for the larger cloth and 0.89 for the sand with OoD episodes, and -0.09 and 0.11 without. The blue line is the real frames (1.00–1.05 for the cloth and 1.26–1.42 for the sand, where the decoder draws less than the real difference). The grey line is the second InD-only run of Cloth Move.
+
+![Rollout error per step, model with OoD episodes divided by the InD-only model](assets/acwm_oodmix_mse_ratio.png)
+
+Rollout error in every step, the model with OoD episodes divided by the InD-only model. Values below 1 are better with OoD episodes. The bands are 95 % bootstrap intervals.
+
+Limits of these numbers:
+- There is one run per model. Cloth Move also has a second run trained on InD only (the pred-param experiment, branch `hanbin5/pred-param`, not pushed). Its error differs from the first InD-only run by +12 % on InD, -17 % on the smaller cloth and +5 % on the larger cloth, and its last-frame cloth by up to 441 pixels. Compared with this second run, the OoD episodes lower the error by 27 % on the smaller cloth and 52 % on the larger cloth and raise it by 12 % on InD. The other three environments have no second run. The higher Pour Water error and the 8 % change in Stack Cube cannot be separated from the difference between two training runs.
+- The OoD episodes are 2.7–3.0 % of the training episodes in Cloth Move, Push Sand and Pour Water and 9.9 % in Stack Cube. We did not vary this share.
+
 ## How to read the ACWM-Phys videos
 
 - The left panel, Real, is the dataset video. The right panel, Model, is the world model's rollout from the first frame and all actions of the episode, decoded to pixels. Both panels show every 5th frame at 3 fps, and the last frame is shown for 2 s. Push Sand is trained on frames squeezed to 224 × 224. The videos stretch them back.
@@ -217,6 +275,18 @@ python repro/eval/render_compare_acwm_phys.py $DINO_TRAIN $DINO_WORK/results/acw
 ```
 
 For Push Sand use `train_sand_h1f5` and epochs 36, 72 and 144. For Stack Cube use `train_stack_h1f5` and epochs 50, 100 and 200. `trend_acwm_phys.py` and `render_compare_acwm_phys.py` also run on a CPU with `--device cpu`. `repro/eval/plot_trend_acwm_phys.py` draws the figure of the section above. How we ran `predictor_long.py` on Google Colab is in [AGENTS.md §6](AGENTS.md).
+
+Adding OoD episodes (optional). Training, merging and the pixel metrics of the two models are in [`repro/eval/acwm_followup/README.md`](repro/eval/acwm_followup/README.md), in Korean. The commands below run both models on the same episodes on a GPU, save the error and the object amount of every step, and make the tables and the three figures of the section above. `rollout_diff_analyze.py` also reads the pixel metrics of `acwm_metrics_mix.py` in `$DINO_WORK/results/acwm_phys/ood_mix/`.
+
+```bash
+R=$DINO_WORK/results/acwm_phys/ood_mix/rollout_diff
+mkdir -p $R
+for e in cloth sand water stack; do python repro/eval/acwm_followup/rollout_curves.py $e $R/${e}_rollout_curves.npz; done
+python repro/eval/acwm_followup/rollout_diff_analyze.py $R
+python repro/eval/acwm_followup/rollout_diff_figs.py $R assets
+```
+
+The second InD-only run of Cloth Move needs the checkpoint and the loader of branch `hanbin5/pred-param` (`repro/eval/acwm_followup/cloth_control.py`). Without it the analysis leaves out the second run.
 
 Output locations and comparison. Models: `$DINO_WORK/train_runs/outputs/<job>/`. Logs: `$DINO_WORK/runs/<job>.log`. Results: `$DINO_WORK/results/acwm_phys/<env>_h1f5.json` and `<env>_h1f5_quant.json` (videos and grids under `figs/`), and `$DINO_WORK/results/pour_water/`. `tables_acwm_phys.py` prints the two tables above from your JSON files. The JSON files of our runs are in the Drive folders. A re-run is not bit-identical because of GPU non-determinism. With one seed per environment we do not know how much the numbers vary between runs.
 
