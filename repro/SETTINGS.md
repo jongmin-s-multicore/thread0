@@ -251,3 +251,23 @@ SSIM 은 repo 의 `eval_images`(입력 [−1, 1]) 와 ACWM 의 skimage([0, 1])�
 - **속도·정밀도.** RTX PRO 6000 (Blackwell, 96 GB, Colab `G4`) 에서 배치 24 로 fp32 46 it/s, TF32 67 it/s, TF32 + bfloat16 autocast 81 it/s 였고 본 실행은 TF32 + bfloat16 로 했다 (검증 손실 차이 0.0005). 세 환경을 한 GPU 에서 CUDA MPS 로 같이 돌려 각 31–36 it/s, 8배까지 3시간 55분 걸렸다. 토큰은 GPU 메모리를 Cloth Move 18 GB, Push Sand 16 GB, Stack Cube 11 GB 쓴다.
 - **평가.** `repro/colab/ckpt_tools.py merge` 로 새 가중치를 원래 체크포인트(디코더 포함)에 넣고, `repro/eval/trend_acwm_phys.py` 로 InD·OoD 테스트 에피소드의 전체 롤아웃 마지막 프레임을 §8.3 의 색 마스크로 잰다. 원래 학습의 중간 epoch 체크포인트도 같은 스크립트로 쟀다 (Cloth Move 5·10·15, Push Sand 6·12·18, Stack Cube 5–25): 중반 이후 OoD 값이 움직이지 않는 것은 이어 학습하기 전에도 보였다.
 - 환경마다 한 번 돌렸다.
+
+### 8.5 OoD 에피소드를 섞어 학습 (predictor 만 처음부터)
+
+"학습 데이터에 OoD 가 없어서 모델이 OoD 양을 따라가지 못하는가"를 보려고, OoD test 에피소드의 일부를 학습에 넣은 predictor 를 처음부터 학습했다 (`repro/colab/predictor_long.py --from_scratch --extra_split ood_test --extra_train <규칙>`). 결과는 루트 `README.md` 의 "Adding OoD episodes to training" 절에 있다.
+
+- 학습: §8.4 와 같은 경로다. 모델, 손실, 옵티마이저 설정, 배치 24, epoch 수는 원래 학습과 같다. `--workers 16 --tf32 --amp` 로 학습했고 인코더와 디코더는 원래 모델과 같다. Push Sand, Pour Water, Stack Cube 는 Colab `G4` 에서 각각 약 13 분 걸렸다 (86 it/s).
+- 넣은 에피소드: 번호가 짝수인 OoD 에피소드를 학습에 넣고 홀수는 남긴다. Pour Water 는 번호가 짝수인 에피소드가 모두 적은 물이어서 짝수 규칙은 적은 물만 넣는다. 그래서 번호를 4 로 나눈 나머지가 0 또는 1 인 에피소드를 넣었다 (`all:mod4=0.1`). 짝수 규칙으로 학습한 모델은 `train_pw_h1f5_oodmix_lowonly` 로 남겼고 결과에 쓰지 않았다.
+
+| 환경 | `--extra_train` | 학습에 넣은 OoD | 남긴 OoD | InD 학습 에피소드 | 학습 에피소드 중 OoD | epoch |
+|---|---|---|---|---|---|---|
+| Cloth Move | `smaller:even,larger:even` | 50 (크기마다 25) | 50 | 1800 | 2.7 % | 5, 10, 15 |
+| Push Sand | `all:even` | 50 | 50 | 1605 | 3.0 % | 6, 12, 18 |
+| Stack Cube | `all:even` | 136 | 135 | 1235 | 9.9 % | 10, 20, 25 |
+| Pour Water | `all:mod4=0.1` | 26 (적은 물 14, 많은 물 12) | 24 (12, 12) | 882 | 2.9 % | 2, 4, 6 |
+
+- 평가: InD test 전부와 OoD test 중 `split.json` 의 `held_out` 에 있는 에피소드를 쓴다. 두 모델이 같은 에피소드에서 첫 실제 프레임과 에피소드의 action 으로 끝까지 예측한다 (rollout). 오차는 `acwm_metrics_mix.py` 와 같은 ACWM-Phys 지표(MSE, M-MSE, PSNR, SSIM)다. `repro/eval/acwm_followup/rollout_curves.py` 는 모델 스텝(5 프레임)마다의 MSE 와 물체의 양도 저장한다. 물체의 양은 `mix_eval.py` 와 같은 방법으로 잰다 (색 마스크, Pour Water 는 상자 안 물 픽셀, Stack Cube 는 쌓임 판정). 마지막 값은 Pour Water 만 마지막 5 s (스텝 50–59) 의 평균이고 나머지는 마지막 프레임이다.
+- 통계: 에피소드를 다시 뽑는 bootstrap 10,000 회로 95 % 구간을 구하고, 두 모델은 같은 에피소드에서 짝지어 비교한다.
+- 확인: 스텝별 MSE 를 평균하면 `acwm_metrics_mix.py` 의 rollout MSE 와 같고 (Cloth Move 는 에피소드마다 1e-8 이내), 마지막 프레임의 물체 양은 기존 `*_heldout.json` (Cloth Move), `*_mix_eval.json` (나머지) 과 같다. 두 모델이 실제 프레임을 복원한 결과는 2.4e-7 이내로 같다.
+- 대조군: Cloth Move 는 InD 만 다시 학습한 predictor (pred-param 실험의 absolute predictor, 브랜치 `hanbin5/pred-param`, 아직 push 하지 않음)를 같은 에피소드에서 돌려 InD 만 학습한 두 모델의 차이를 잰다 (`cloth_control.py`). 다른 세 환경에는 이런 모델이 없다.
+- 환경마다 모델 하나를 한 번 학습했다.
